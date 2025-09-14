@@ -111,6 +111,120 @@ Creates an initial `super-admin` (skips if one exists):
 npm run create-super-admin
 ```
 
+### 4. Demo Data Seeding
+
+Populate the database with realistic demo data (students with personality traits, hostels, rooms, pending + some approved allocations, and complaints):
+
+```bash
+npm run seed:demo
+```
+
+Options (pass as args):
+
+```
+students=150 hostelsPerGender=4 roomsPerHostel=18 complaints=40 session=2025
+```
+
+Example:
+
+```bash
+npm run seed:demo -- students=150 hostelsPerGender=4 roomsPerHostel=18 complaints=50
+```
+
+Keep existing data (do not wipe) with:
+
+```bash
+npm run seed:demo:keep
+```
+
+Clear all demo collections:
+
+```bash
+npm run seed:clear
+```
+
+Seed output includes the shared demo password for all generated students.
+
+### 5. Allocation Load Simulation
+
+Simulate a wave of concurrent allocation submissions to observe fairness rotation and pairing performance.
+
+Prepare a tokens file (one JWT per line for student users):
+
+```bash
+cat > tokens.txt <<'EOF'
+<jwt1>
+<jwt2>
+<jwt3>
+EOF
+```
+
+Run the simulator (submission mode):
+
+```bash
+npm run simulate:allocations -- baseUrl=http://localhost:8080 count=100 concurrency=15 authFile=./tokens.txt
+```
+
+Additional modes now supported: `reallocate` (admin-driven reallocations) and `mixed` (blend of submissions + reallocations).
+
+Parameters:
+
+| Param | Default | Description |
+|-------|---------|-------------|
+| baseUrl | http://localhost:8080 | API base URL |
+| count | 50 | Total submissions to attempt |
+| concurrency | 10 | Parallel requests per batch |
+| delayBetweenBatchesMs | 250 | Delay after each batch (ms) |
+| authFile | (required) | Path to tokens file |
+| session | current year | Academic session value in body |
+| timeoutMs | 8000 | Per-request abort timeout |
+| mode | submit | submit | reallocate | mixed |
+| reallocateRatio | 0.3 | When mode=mixed, probability an attempt is a reallocate |
+| adminAuthFile | (required for reallocate/mixed) | Path to admin tokens file |
+
+Output example (submit mode):
+
+```json
+{ "durationMs": 1835, "successes": 42, "failures": 3, "duplicates": 55, "attempted": 100 }
+```
+
+Duplicates represent students who already had a pending/approved allocation.
+
+Reallocate mode example:
+
+```bash
+npm run simulate:allocations -- mode=reallocate count=40 concurrency=5 adminAuthFile=./adminTokens.txt
+```
+
+Mixed mode example (25% reallocations):
+
+```bash
+npm run simulate:allocations -- mode=mixed reallocateRatio=0.25 count=120 concurrency=12 authFile=./studentTokens.txt adminAuthFile=./adminTokens.txt
+```
+
+Mixed/reallocate output shape:
+
+```json
+{
+  "durationMs": 2105,
+  "mode": "mixed",
+  "attempted": 120,
+  "submit": { "successes": 48, "failures": 5, "duplicates": 30 },
+  "reallocate": { "success": 20, "failed": 17, "compatibility": 6, "capacity": 4, "other": 7 }
+}
+```
+
+Field meanings:
+
+- submit.successes: New allocation submissions resulting in 201
+- submit.failures: Non-duplicate submission errors (e.g., validation)
+- submit.duplicates: Student already has a pending/approved allocation
+- reallocate.success: Successful reallocation operations
+- reallocate.failed: Total failed reallocation attempts (sum of compatibility + capacity + other)
+- reallocate.compatibility: Failures due to compatibility constraint
+- reallocate.capacity: Failures because target room was full
+- reallocate.other: All other error types (auth, not found, misc validation)
+
 ---
 
 ## 📘 API Documentation (Swagger)

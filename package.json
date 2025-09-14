@@ -6,6 +6,10 @@
     "start": "node src/app.js",
   "test": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand",
     "create-super-admin": "node src/createSuperAdmin.js",
+  "seed:demo": "node src/scripts/seedDemoData.js",
+  "seed:demo:keep": "node src/scripts/seedDemoData.js --keep",
+  "seed:clear": "node src/scripts/clearData.js",
+  "simulate:allocations": "node src/scripts/simulateAllocations.js",
     "lint": "eslint \"src/**/*.js\"",
     "lint:fix": "eslint \"src/**/*.js\" --fix"
   },
@@ -22,6 +26,8 @@
     "mongoose": "^8.18.1",
     "multer": "^2.0.2",
   "pino": "^9.3.2",
+  "@faker-js/faker": "^9.0.0",
+  "axios": "^1.7.7",
     "swagger-ui-express": "^5.0.1",
     "swagger-jsdoc": "^6.2.8",
     "zod": "^3.23.8"

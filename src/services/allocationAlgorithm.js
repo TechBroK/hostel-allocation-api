@@ -179,9 +179,9 @@ export function computeCompatibility(studentA, studentB, options = {}) {
 // New classification (exported for tests & documentation):
 // 85-100 veryHigh | 70-84 high | 55-69 moderate | <55 low
 export function classifyCompatibilityRange(pct) {
-  if (pct >= 85) return "veryHigh";
-  if (pct >= 70) return "high";
-  if (pct >= 55) return "moderate";
+  if (pct >= 85) { return "veryHigh"; }
+  if (pct >= 70) { return "high"; }
+  if (pct >= 55) { return "moderate"; }
   return "low";
 }
 
@@ -208,9 +208,9 @@ export function allocateStudent(targetStudent, candidateStudents, { method } = {
 }
 
 function deriveStatus(range, score) {
-  if (range === "veryHigh") return "auto-pair";
-  if (range === "high") return score >= 75 ? "suggest" : "awaiting-review";
-  if (range === "moderate") return "needs-admin";
+  if (range === "veryHigh") { return "auto-pair"; }
+  if (range === "high") { return score >= 75 ? "suggest" : "awaiting-review"; }
+  if (range === "moderate") { return "needs-admin"; }
   return "reject";
 }
 
