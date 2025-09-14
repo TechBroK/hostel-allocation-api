@@ -1,6 +1,8 @@
 // src/routes/authRoutes.js
 import express from "express";
 import { register, login } from "../controllers/authController.js";
+import { validate } from "../middleware/validate.js";
+import { registerSchema, loginSchema } from "../validators/auth.validator.js";
 
 const router = express.Router();
 
@@ -43,7 +45,7 @@ const router = express.Router();
  *       400:
  *         description: Validation error
  */
-router.post("/register", register);
+router.post("/register", validate(registerSchema), register);
 
 /**
  * @swagger
@@ -69,6 +71,6 @@ router.post("/register", register);
  *       401:
  *         description: Invalid credentials
  */
-router.post("/login", login);
+router.post("/login", validate(loginSchema), login);
 
 export default router;

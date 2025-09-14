@@ -3,6 +3,8 @@ import express from "express";
 import multer from "multer";
 import { protect } from "../middleware/authMiddleware.js";
 import { getProfile, updateProfile, uploadAvatar, getRoommate } from "../controllers/studentController.js";
+import { validate } from "../middleware/validate.js";
+import { updateProfileSchema, studentIdParamSchema } from "../validators/student.validator.js";
 
 const router = express.Router();
 const upload = multer({ dest: "uploads/" }); // customize for production (cloud + originalname etc.)
@@ -30,7 +32,7 @@ const upload = multer({ dest: "uploads/" }); // customize for production (cloud 
  *       200: { description: Profile returned }
  */
 
-router.get("/:studentId/profile", protect, getProfile);
+router.get("/:studentId/profile", protect, validate(studentIdParamSchema), getProfile);
 
 /**
  * @swagger
@@ -57,7 +59,7 @@ router.get("/:studentId/profile", protect, getProfile);
  *     responses:
  *       200: { description: Updated }
  */
-router.put("/:studentId/profile", protect, updateProfile);
+router.put("/:studentId/profile", protect, validate(studentIdParamSchema), validate(updateProfileSchema), updateProfile);
 
 /**
  * @swagger
@@ -84,7 +86,7 @@ router.put("/:studentId/profile", protect, updateProfile);
  *     responses:
  *       200: { description: Avatar uploaded }
  */
-router.post("/:studentId/profile/avatar", protect, upload.single("avatar"), uploadAvatar);
+router.post("/:studentId/profile/avatar", protect, validate(studentIdParamSchema), upload.single("avatar"), uploadAvatar);
 
 /**
  * @swagger
@@ -101,7 +103,7 @@ router.post("/:studentId/profile/avatar", protect, upload.single("avatar"), uplo
  *     responses:
  *       200: { description: Roommate data }
  */
-router.get("/:studentId/roommate", protect, getRoommate);
+router.get("/:studentId/roommate", protect, validate(studentIdParamSchema), getRoommate);
 router.get("/ping", (req, res) => {
   res.json({ msg: "Routes alive ✅" });
 });

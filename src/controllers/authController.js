@@ -2,16 +2,21 @@
 import User from "../models/User.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { AuthError, ValidationError } from "../errors/AppError.js";
+import { success } from "../utils/apiResponse.js";
 
-export const register = async (req, res) => {
+export const register = async (req, res, next) => {
   try {
-    const { fullName, email, password, matricNumber, level, phone } = req.body;
+    // Prefer validated payload if present
+    const { fullName, email, password, matricNumber, level, phone } = req.validated || req.body;
+
+    // Redundant guard (schema should enforce) but kept for backward safety
     if (!fullName || !email || !password) {
-      return res.status(400).json({ message: "fullName, email and password required" });
+      throw new ValidationError("fullName, email and password required");
     }
 
     const existing = await User.findOne({ email });
-    if (existing) return res.status(409).json({ message: "Email already in use" });
+    if (existing) throw new ValidationError("Email already in use");
 
     const hashed = await bcrypt.hash(password, 10);
     const user = await User.create({
@@ -25,24 +30,22 @@ export const register = async (req, res) => {
 
     return res.status(201).json({ id: user._id, status: "created" });
   } catch (err) {
-    console.error("Register error:", err);
-    return res.status(500).json({ message: err.message });
+    return next(err);
   }
 };
 
-export const login = async (req, res) => {
+export const login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.validated || req.body;
     if (!email || !password) {
-      return res.status(400).json({ message: "Email and password required" });
+      throw new ValidationError("Email and password required");
     }
 
-    // 👇 explicitly select password
     const user = await User.findOne({ email }).select("+password");
-    if (!user) return res.status(401).json({ message: "Invalid credentials" });
+    if (!user) throw new AuthError("Invalid credentials");
 
     const match = await bcrypt.compare(password, user.password);
-    if (!match) return res.status(401).json({ message: "Invalid credentials" });
+    if (!match) throw new AuthError("Invalid credentials");
 
     const token = jwt.sign(
       { id: user._id, role: user.role },
@@ -50,6 +53,7 @@ export const login = async (req, res) => {
       { expiresIn: "7d" }
     );
 
+    // Preserve legacy shape
     return res.json({
       token,
       user: {
@@ -60,7 +64,6 @@ export const login = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error("Login error:", err);
-    return res.status(500).json({ message: err.message });
+    return next(err);
   }
 };

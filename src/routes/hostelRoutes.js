@@ -1,6 +1,8 @@
 // src/routes/hostelRoutes.js
 import express from "express";
 import { listHostels, getHostelRooms } from "../controllers/hostelController.js";
+import { validate } from "../middleware/validate.js";
+import { hostelIdParamSchema } from "../validators/hostel.validator.js";
 
 const router = express.Router();
 
@@ -45,7 +47,7 @@ router.get("/", listHostels); // public listing
  *       200:
  *         description: List of hostels
  */
-router.get("/:hostelId/rooms", getHostelRooms);
+router.get("/:hostelId/rooms", validate(hostelIdParamSchema), getHostelRooms);
 router.get("/ping", (req, res) => {
   res.json({ msg: "Routes alive ✅" });
 });

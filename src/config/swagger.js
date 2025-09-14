@@ -24,47 +24,81 @@ const swaggerDefinition = {
     schemas: {
       User: {
         type: 'object',
+        required: ['fullName', 'email', 'password'],
         properties: {
           _id: { type: 'string' },
-          name: { type: 'string' },
-          email: { type: 'string', format: 'email' },
-          role: { type: 'string', enum: ['student', 'admin', 'super-admin'] }
+            fullName: { type: 'string', minLength: 2 },
+            matricNumber: { type: 'string' },
+            email: { type: 'string', format: 'email' },
+            phone: { type: 'string' },
+            role: { type: 'string', enum: ['student', 'admin', 'super-admin'] },
+            level: { type: 'string' }
         }
       },
       Hostel: {
         type: 'object',
+        required: ['name', 'type', 'capacity'],
         properties: {
           _id: { type: 'string' },
-          name: { type: 'string' },
-          capacity: { type: 'number' }
+          name: { type: 'string', minLength: 2 },
+          type: { type: 'string', enum: ['male', 'female'] },
+          capacity: { type: 'integer', minimum: 1 },
+          description: { type: 'string' }
         }
       },
       Room: {
         type: 'object',
+        required: ['hostel', 'roomNumber', 'type', 'capacity'],
         properties: {
           _id: { type: 'string' },
           hostel: { type: 'string' },
-          number: { type: 'string' },
-          capacity: { type: 'number' },
-          occupants: { type: 'array', items: { type: 'string' } }
+          roomNumber: { type: 'string', minLength: 1 },
+          type: { type: 'string', enum: ['Standard', 'Premium'] },
+          capacity: { type: 'integer', minimum: 1 },
+          occupied: { type: 'integer', minimum: 0 }
         }
       },
       Allocation: {
         type: 'object',
+        required: ['student', 'room', 'session'],
         properties: {
           _id: { type: 'string' },
           student: { type: 'string' },
           room: { type: 'string' },
-          status: { type: 'string' }
+          session: { type: 'string', minLength: 4 },
+          status: { type: 'string', enum: ['pending', 'approved', 'rejected'] },
+          allocatedAt: { type: 'string', format: 'date-time' }
         }
       },
       Complaint: {
         type: 'object',
+        required: ['student', 'type', 'description'],
         properties: {
           _id: { type: 'string' },
           student: { type: 'string' },
-          message: { type: 'string' },
-          status: { type: 'string' }
+          type: { type: 'string', enum: ['Maintenance', 'Roommate', 'Facilities', 'Other'] },
+          description: { type: 'string', minLength: 5 },
+          status: { type: 'string', enum: ['Pending', 'Resolved'] },
+          response: { type: 'string' },
+          date: { type: 'string', format: 'date-time' }
+        }
+      },
+      PagedMeta: {
+        type: 'object',
+        properties: {
+          page: { type: 'integer', minimum: 1 },
+          limit: { type: 'integer', minimum: 1 },
+          total: { type: 'integer', minimum: 0 },
+          pageCount: { type: 'integer', minimum: 1 }
+        }
+      },
+      Health: {
+        type: 'object',
+        properties: {
+          status: { type: 'string' },
+          uptime: { type: 'number' },
+          timestamp: { type: 'string', format: 'date-time' },
+          db: { type: 'string' }
         }
       }
     }

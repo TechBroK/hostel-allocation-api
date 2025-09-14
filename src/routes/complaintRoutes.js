@@ -2,6 +2,8 @@
 import express from "express";
 import { protect } from "../middleware/authMiddleware.js";
 import { createComplaint, getComplaintsByStudent } from "../controllers/complaintController.js";
+import { validate } from "../middleware/validate.js";
+import { createComplaintSchema, studentIdParamSchema } from "../validators/complaint.validator.js";
 
 const router = express.Router();
 
@@ -38,7 +40,7 @@ const router = express.Router();
  */
 
 // POST /api/complaints/:studentId
-router.post("/:studentId", protect, createComplaint);
+router.post("/:studentId", protect, validate(studentIdParamSchema), validate(createComplaintSchema), createComplaint);
 
 /**
  * @swagger
@@ -57,6 +59,6 @@ router.post("/:studentId", protect, createComplaint);
  */
 
 // GET /api/complaints/:studentId
-router.get("/:studentId", protect, getComplaintsByStudent);
+router.get("/:studentId", protect, validate(studentIdParamSchema), getComplaintsByStudent);
 
 export default router;

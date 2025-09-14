@@ -6,6 +6,12 @@ import { listStudents, updateStudentStatus, getSummary, exportReport, createAdmi
 import { createHostel, listHostels } from "../controllers/hostelController.js";
 import { createRoom, listRoomsByHostel } from "../controllers/roomController.js";
 import { adminCreateAllocation, listAllocations } from "../controllers/allocationController.js";
+import { validate } from "../middleware/validate.js";
+import { createHostelSchema } from "../validators/hostel.validator.js";
+import { createRoomSchema } from "../validators/room.validator.js";
+import { adminCreateAllocationSchema } from "../validators/allocation.validator.js";
+import { registerSchema } from "../validators/auth.validator.js";
+import { updateStudentStatusSchema } from "../validators/admin.validator.js";
 
 const router = express.Router();
 
@@ -39,20 +45,20 @@ const router = express.Router();
  *       403: { description: Forbidden }
  */
 // super-admin creates admin
-router.post("/admins", protect, permit("super-admin"), createAdminUser);
+router.post("/admins", protect, permit("super-admin"), validate(registerSchema), createAdminUser);
 
 // students
 router.get("/students", protect, permit("admin"), listStudents);
-router.put("/students/:studentId", protect, permit("admin"), updateStudentStatus);
+router.put("/students/:studentId", protect, permit("admin"), validate(updateStudentStatusSchema), updateStudentStatus);
 
 // hostels & rooms
-router.post("/hostels", protect, permit("admin"), createHostel);
+router.post("/hostels", protect, permit("admin"), validate(createHostelSchema), createHostel);
 router.get("/hostels", protect, permit("admin"), listHostels);
-router.post("/hostels/:hostelId/rooms", protect, permit("admin"), createRoom);
+router.post("/hostels/:hostelId/rooms", protect, permit("admin"), validate(createRoomSchema), createRoom);
 router.get("/hostels/:hostelId/rooms", protect, permit("admin"), listRoomsByHostel);
 
 // allocations
-router.post("/allocations", protect, permit("admin"), adminCreateAllocation);
+router.post("/allocations", protect, permit("admin"), validate(adminCreateAllocationSchema), adminCreateAllocation);
 router.get("/allocations", protect, permit("admin"), listAllocations);
 
 // reports

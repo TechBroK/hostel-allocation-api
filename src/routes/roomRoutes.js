@@ -3,6 +3,8 @@ import express from "express";
 import { protect } from "../middleware/authMiddleware.js";
 import { permit } from "../middleware/roleMiddleware.js";
 import { createRoom, listRoomsByHostel, getRoom } from "../controllers/roomController.js";
+import { validate } from "../middleware/validate.js";
+import { createRoomSchema, hostelIdParamSchema, roomIdParamSchema } from "../validators/room.validator.js";
 
 const router = express.Router();
 
@@ -44,7 +46,7 @@ const router = express.Router();
  */
 
 // create room (admin) - note: admin also has admin route for this; duplicate is OK
-router.post("/:hostelId/rooms", protect, permit("admin"), createRoom);
+router.post("/:hostelId/rooms", protect, permit("admin"), validate(hostelIdParamSchema), validate(createRoomSchema), createRoom);
 
 /**
  * @swagger
@@ -64,7 +66,7 @@ router.post("/:hostelId/rooms", protect, permit("admin"), createRoom);
  */
 
 // list rooms for a hostel
-router.get("/hostel/:hostelId", listRoomsByHostel);
+router.get("/hostel/:hostelId", validate(hostelIdParamSchema), listRoomsByHostel);
 
 /**
  * @swagger
@@ -86,6 +88,6 @@ router.get("/hostel/:hostelId", listRoomsByHostel);
  */
 
 // get single room
-router.get("/:id", getRoom);
+router.get("/:id", validate(roomIdParamSchema), getRoom);
 
 export default router;

@@ -12,6 +12,7 @@ import connectDB from "./config/db.js";
 import cors from "cors";
 import swaggerUi from "swagger-ui-express";
 import swaggerSpec from "./config/swagger.js";
+import { notFound, errorHandler } from "./middleware/errorMiddleware.js";
 
 dotenv.config();
 const app = express();
@@ -34,5 +35,21 @@ app.use("/api/complaints", complaintRoutes);
 app.get("/", (req, res) => {
   res.json("Welcome to the node server");
 });
+
+// Health check
+app.get('/healthz', async (req, res) => {
+  const dbState = mongoose.connection.readyState; // 0=disconnected,1=connected,2=connecting,3=disconnecting
+  const states = ['disconnected','connected','connecting','disconnecting'];
+  res.json({
+    status: 'ok',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+    db: states[dbState] || 'unknown'
+  });
+});
+
+// Fallback & error handling (must be after routes)
+app.use(notFound);
+app.use(errorHandler);
 
 app.listen(8080, () => console.log(`Server running on port ${8080}`));

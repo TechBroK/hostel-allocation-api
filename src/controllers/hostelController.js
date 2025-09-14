@@ -1,31 +1,31 @@
 // src/controllers/hostelController.js
 import Hostel from "../models/Hostel.js";
 import Room from "../models/Room.js";
+import { ValidationError, NotFoundError } from "../errors/AppError.js";
+import { getPaginationParams, buildPagedResponse } from "../utils/pagination.js";
 
-export const createHostel = async (req, res) => {
+export const createHostel = async (req, res, next) => {
   try {
-    const { name, type, capacity, description } = req.body;
-    if (!name || !type || !capacity) return res.status(400).json({ message: "name, type, capacity required" });
-
+    const { name, type, capacity, description } = req.validated || req.body;
+    if (!name || !type || capacity == null) throw new ValidationError("name, type, capacity required");
     const hostel = await Hostel.create({ name, type, capacity, description });
     return res.status(201).json({ id: hostel._id, status: "created" });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: err.message });
+    return next(err);
   }
 };
 
-export const listHostels = async (req, res) => {
+export const listHostels = async (req, res, next) => {
   try {
-    const hostels = await Hostel.find().lean();
-
-    // compute occupied and available per hostel
+    const { page, limit, skip } = getPaginationParams(req.query);
+    const [hostels, total] = await Promise.all([
+      Hostel.find().skip(skip).limit(limit).lean(),
+      Hostel.countDocuments()
+    ]);
     const results = await Promise.all(
       hostels.map(async (h) => {
         const rooms = await Room.find({ hostel: h._id }).lean();
         const occupied = rooms.reduce((s, r) => s + (r.occupied || 0), 0);
-        const roomCapacity = rooms.reduce((s, r) => s + (r.capacity || 0), 0);
-
         return {
           id: h._id,
           name: h.name,
@@ -44,22 +44,21 @@ export const listHostels = async (req, res) => {
         };
       })
     );
-
-    return res.json(results);
+  const response = buildPagedResponse({ items: results, total, page, limit });
+  return res.json(response);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: err.message });
+    return next(err);
   }
 };
 
-export const getHostelRooms = async (req, res) => {
+export const getHostelRooms = async (req, res, next) => {
   try {
-    const { hostelId } = req.params;
+    const { hostelId } = req.validated || req.params;
     const rooms = await Room.find({ hostel: hostelId }).lean();
+    if (!rooms) throw new NotFoundError("Hostel or rooms not found");
     return res.json(rooms);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: err.message });
+    return next(err);
   }
 };
 

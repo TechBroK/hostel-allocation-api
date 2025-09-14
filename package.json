@@ -20,7 +20,8 @@
     "mongoose": "^8.18.1",
     "multer": "^2.0.2",
     "swagger-ui-express": "^5.0.1",
-    "swagger-jsdoc": "^6.2.8"
+    "swagger-jsdoc": "^6.2.8",
+    "zod": "^3.23.8"
   },
   "type": "module"
 }

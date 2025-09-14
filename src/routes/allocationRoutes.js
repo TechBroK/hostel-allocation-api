@@ -2,12 +2,9 @@
 import express from "express";
 import { protect } from "../middleware/authMiddleware.js";
 import { permit } from "../middleware/roleMiddleware.js";
-import {
-  submitAllocation,
-  adminCreateAllocation,
-  listAllocations,
-  getAllocationStatus,
-} from "../controllers/allocationController.js";
+import { submitAllocation, adminCreateAllocation, listAllocations, getAllocationStatus } from "../controllers/allocationController.js";
+import { validate } from "../middleware/validate.js";
+import { submitAllocationSchema, adminCreateAllocationSchema, studentIdParamSchema } from "../validators/allocation.validator.js";
 
 const router = express.Router();
 
@@ -40,7 +37,7 @@ const router = express.Router();
  */
 
 // student submission (authenticated)
-router.post("/", protect, submitAllocation);
+router.post("/", protect, validate(submitAllocationSchema), submitAllocation);
 
 /**
  * @swagger
@@ -60,7 +57,7 @@ router.post("/", protect, submitAllocation);
  */
 
 // get status for student
-router.get("/:studentId/status", protect, getAllocationStatus);
+router.get("/:studentId/status", protect, validate(studentIdParamSchema), getAllocationStatus);
 
 /**
  * @swagger
@@ -88,6 +85,6 @@ router.get("/", protect, permit("admin"), listAllocations);
  */
 
 // admin create (also exposed on /api/admin/allocations)
-router.post("/admin", protect, permit("admin"), adminCreateAllocation);
+router.post("/admin", protect, permit("admin"), validate(adminCreateAllocationSchema), adminCreateAllocation);
 
 export default router;
