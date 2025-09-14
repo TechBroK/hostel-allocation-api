@@ -5,7 +5,9 @@
   "scripts": {
     "start": "node src/app.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "create-super-admin": "node src/createSuperAdmin.js"
+    "create-super-admin": "node src/createSuperAdmin.js",
+    "lint": "eslint \"src/**/*.js\"",
+    "lint:fix": "eslint \"src/**/*.js\" --fix"
   },
   "keywords": [],
   "author": "",
@@ -22,6 +24,13 @@
     "swagger-ui-express": "^5.0.1",
     "swagger-jsdoc": "^6.2.8",
     "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.10.0",
+    "eslint": "^9.35.0",
+    "eslint-plugin-import": "^2.29.1",
+    "globals": "^15.11.0",
+    "prettier": "^3.3.3"
   },
   "type": "module"
 }

@@ -1,5 +1,6 @@
 // src/routes/allocationRoutes.js
 import express from "express";
+
 import { protect } from "../middleware/authMiddleware.js";
 import { permit } from "../middleware/roleMiddleware.js";
 import { submitAllocation, adminCreateAllocation, listAllocations, getAllocationStatus } from "../controllers/allocationController.js";

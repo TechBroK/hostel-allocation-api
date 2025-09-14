@@ -1,5 +1,6 @@
 // src/routes/complaintRoutes.js
 import express from "express";
+
 import { protect } from "../middleware/authMiddleware.js";
 import { createComplaint, getComplaintsByStudent } from "../controllers/complaintController.js";
 import { validate } from "../middleware/validate.js";

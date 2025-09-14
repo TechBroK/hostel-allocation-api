@@ -13,7 +13,9 @@ export function errorHandler(err, req, res, next) { // eslint-disable-line no-un
     message: err.message || "Internal Server Error",
     code: err.code || (status === 500 ? "SERVER_ERROR" : undefined)
   };
-  if (err.details) response.details = err.details;
+  if (err.details) {
+    response.details = err.details;
+  }
 
   // Log structured error
   logger.error("Request error", {

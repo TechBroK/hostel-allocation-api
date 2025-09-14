@@ -7,7 +7,9 @@ import { getPaginationParams, buildPagedResponse } from "../utils/pagination.js"
 export const createHostel = async (req, res, next) => {
   try {
     const { name, type, capacity, description } = req.validated || req.body;
-    if (!name || !type || capacity == null) throw new ValidationError("name, type, capacity required");
+    if (!name || !type || capacity === null || capacity === undefined) {
+      throw new ValidationError("name, type, capacity required");
+    }
     const hostel = await Hostel.create({ name, type, capacity, description });
     return res.status(201).json({ id: hostel._id, status: "created" });
   } catch (err) {
@@ -55,7 +57,9 @@ export const getHostelRooms = async (req, res, next) => {
   try {
     const { hostelId } = req.validated || req.params;
     const rooms = await Room.find({ hostel: hostelId }).lean();
-    if (!rooms) throw new NotFoundError("Hostel or rooms not found");
+    if (!rooms) {
+      throw new NotFoundError("Hostel or rooms not found");
+    }
     return res.json(rooms);
   } catch (err) {
     return next(err);

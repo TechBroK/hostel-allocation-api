@@ -1,5 +1,6 @@
 // src/routes/hostelRoutes.js
 import express from "express";
+
 import { listHostels, getHostelRooms } from "../controllers/hostelController.js";
 import { validate } from "../middleware/validate.js";
 import { hostelIdParamSchema } from "../validators/hostel.validator.js";

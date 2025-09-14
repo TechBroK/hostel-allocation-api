@@ -2,7 +2,9 @@
 const levels = ["debug", "info", "warn", "error"];
 
 function log(level, ...args) {
-  if (!levels.includes(level)) level = "info";
+  if (!levels.includes(level)) {
+    level = "info";
+  }
   const ts = new Date().toISOString();
   // Simple structured style; replace with real logger in future
   // eslint-disable-next-line no-console

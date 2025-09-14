@@ -6,9 +6,13 @@ import { getPaginationParams, buildPagedResponse } from "../utils/pagination.js"
 export const createComplaint = async (req, res, next) => {
   try {
     const { studentId } = req.params;
-    if (req.user.role !== "admin" && req.user._id.toString() !== studentId) throw new ForbiddenError();
+    if (req.user.role !== "admin" && req.user._id.toString() !== studentId) {
+      throw new ForbiddenError();
+    }
     const { type, description } = req.validated || req.body;
-    if (!type || !description) throw new ValidationError("type and description required");
+    if (!type || !description) {
+      throw new ValidationError("type and description required");
+    }
     const complaint = await Complaint.create({ student: studentId, type, description, status: "Pending", response: null });
     return res.status(201).json(complaint);
   } catch (err) {
@@ -19,7 +23,9 @@ export const createComplaint = async (req, res, next) => {
 export const getComplaintsByStudent = async (req, res, next) => {
   try {
     const { studentId } = req.params;
-    if (req.user.role !== "admin" && req.user._id.toString() !== studentId) throw new ForbiddenError();
+    if (req.user.role !== "admin" && req.user._id.toString() !== studentId) {
+      throw new ForbiddenError();
+    }
     const { page, limit, skip } = getPaginationParams(req.query);
     const [complaints, total] = await Promise.all([
       Complaint.find({ student: studentId }).sort({ date: -1 }).skip(skip).limit(limit),

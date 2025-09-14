@@ -1,0 +1,36 @@
+{
+  "root": true,
+  "env": {
+    "es2023": true,
+    "node": true
+  },
+  "parserOptions": {
+    "ecmaVersion": 2023,
+    "sourceType": "module"
+  },
+  "plugins": ["import"],
+  "extends": [
+    "eslint:recommended",
+    "plugin:import/recommended"
+  ],
+  "settings": {
+    "import/resolver": {
+      "node": {
+        "extensions": [".js", ".mjs"]
+      }
+    }
+  },
+  "rules": {
+    "no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "no-console": ["warn", { "allow": ["warn", "error"] }],
+    "eqeqeq": ["error", "always"],
+    "curly": ["error", "all"],
+    "import/order": ["warn", { "groups": [["builtin", "external"], ["internal"], ["parent", "sibling", "index"]], "newlines-between": "always" }],
+    "import/no-unresolved": "error",
+    "import/newline-after-import": ["warn", { "count": 1 }],
+    "prefer-const": "error",
+    "object-shorthand": ["warn", "always"],
+    "arrow-body-style": ["warn", "as-needed"],
+    "no-var": "error"
+  }
+}

@@ -1,5 +1,6 @@
 // src/routes/adminRoutes.js
 import express from "express";
+
 import { protect } from "../middleware/authMiddleware.js";
 import { permit } from "../middleware/roleMiddleware.js";
 import { listStudents, updateStudentStatus, getSummary, exportReport, createAdminUser } from "../controllers/adminController.js";

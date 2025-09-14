@@ -1,6 +1,9 @@
 import express from "express";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
+import cors from "cors";
+import swaggerUi from "swagger-ui-express";
+
 import authRoutes from "./routes/authRoutes.js";
 import studentRoutes from "./routes/studentRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
@@ -9,10 +12,9 @@ import roomRoutes from "./routes/roomRoutes.js";
 import allocationRoutes from "./routes/allocationRoutes.js";
 import complaintRoutes from "./routes/complaintRoutes.js";
 import connectDB from "./config/db.js";
-import cors from "cors";
-import swaggerUi from "swagger-ui-express";
 import swaggerSpec from "./config/swagger.js";
 import { notFound, errorHandler } from "./middleware/errorMiddleware.js";
+import logger from "./utils/logger.js";
 
 dotenv.config();
 const app = express();
@@ -52,4 +54,4 @@ app.get('/healthz', async (req, res) => {
 app.use(notFound);
 app.use(errorHandler);
 
-app.listen(8080, () => console.log(`Server running on port ${8080}`));
+app.listen(8080, () => logger.info(`Server running on port 8080`));

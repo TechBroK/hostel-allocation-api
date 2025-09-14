@@ -13,11 +13,17 @@ export const createRoom = async (req, res, next) => {
   try {
     const { hostelId } = req.params;
     const { roomNumber, type, capacity } = req.validated || req.body;
-    if (!roomNumber || !type || capacity == null) throw new ValidationError("roomNumber, type and capacity are required");
+    if (!roomNumber || !type || capacity === null || capacity === undefined) {
+      throw new ValidationError("roomNumber, type and capacity are required");
+    }
     const hostel = await Hostel.findById(hostelId);
-    if (!hostel) throw new NotFoundError("Hostel not found");
+    if (!hostel) {
+      throw new NotFoundError("Hostel not found");
+    }
     const exists = await Room.findOne({ hostel: hostelId, roomNumber });
-    if (exists) throw new ValidationError("Room number already exists in this hostel");
+    if (exists) {
+      throw new ValidationError("Room number already exists in this hostel");
+    }
     const room = await Room.create({ hostel: hostelId, roomNumber, type, capacity, occupied: 0 });
     return res.status(201).json({ id: room._id, status: "created" });
   } catch (err) {
@@ -60,7 +66,9 @@ export const getRoom = async (req, res, next) => {
   try {
     const { id } = req.validated || req.params;
     const room = await Room.findById(id).populate("hostel", "name type capacity").lean();
-    if (!room) throw new NotFoundError("Room not found");
+    if (!room) {
+      throw new NotFoundError("Room not found");
+    }
     return res.json({
       id: room._id,
       roomNumber: room.roomNumber,

@@ -1,6 +1,7 @@
 // src/routes/studentRoutes.js
 import express from "express";
 import multer from "multer";
+
 import { protect } from "../middleware/authMiddleware.js";
 import { getProfile, updateProfile, uploadAvatar, getRoommate } from "../controllers/studentController.js";
 import { validate } from "../middleware/validate.js";

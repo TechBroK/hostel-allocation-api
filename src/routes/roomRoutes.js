@@ -1,5 +1,6 @@
 // src/routes/roomRoutes.js
 import express from "express";
+
 import { protect } from "../middleware/authMiddleware.js";
 import { permit } from "../middleware/roleMiddleware.js";
 import { createRoom, listRoomsByHostel, getRoom } from "../controllers/roomController.js";

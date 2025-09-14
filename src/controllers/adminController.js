@@ -1,6 +1,7 @@
 // src/controllers/adminController.js
 
 import bcrypt from "bcryptjs";
+
 import User from "../models/User.js";
 import Allocation from "../models/Allocation.js";
 import Room from "../models/Room.js";
@@ -28,9 +29,13 @@ export const listStudents = async (req, res, next) => {
   export const createAdminUser = async (req, res, next) => {
     try {
       const { fullName, email, password, phone } = req.validated || req.body;
-      if (!fullName || !email || !password) throw new ValidationError("fullName, email and password required");
+      if (!fullName || !email || !password) {
+        throw new ValidationError("fullName, email and password required");
+      }
       const existing = await User.findOne({ email });
-      if (existing) throw new ValidationError("Email already in use");
+      if (existing) {
+        throw new ValidationError("Email already in use");
+      }
       const hashed = await bcrypt.hash(password, 10);
       const admin = await User.create({ fullName, email, password: hashed, phone, role: "admin" });
       return res.status(201).json({ id: admin._id, status: "admin created" });
@@ -42,9 +47,13 @@ export const updateStudentStatus = async (req, res, next) => {
   try {
     const { studentId } = req.params;
     const { status } = req.validated || req.body;
-    if (!["allocated", "pending", "rejected"].includes(status)) throw new ValidationError("Invalid status");
+    if (!["allocated", "pending", "rejected"].includes(status)) {
+      throw new ValidationError("Invalid status");
+    }
     const allocation = await Allocation.findOne({ student: studentId }).sort({ allocatedAt: -1 });
-    if (!allocation) throw new NotFoundError("Allocation not found for student");
+    if (!allocation) {
+      throw new NotFoundError("Allocation not found for student");
+    }
     allocation.status = status;
     await allocation.save();
     return res.json({ id: allocation._id, status: allocation.status });
@@ -69,7 +78,9 @@ export const getSummary = async (req, res, next) => {
 export const exportReport = async (req, res, next) => {
   try {
     const { type = "allocations", format = "csv" } = req.query;
-    if (format !== "csv") throw new ValidationError("Only csv export supported in this endpoint");
+    if (format !== "csv") {
+      throw new ValidationError("Only csv export supported in this endpoint");
+    }
     if (type === "students") {
       const students = await User.find({ role: "student" }).select("fullName matricNumber email level").lean();
       const header = "id,fullName,matricNumber,email,level\n";
