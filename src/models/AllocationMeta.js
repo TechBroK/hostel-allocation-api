@@ -6,6 +6,4 @@ const allocationMetaSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now }
 });
 
-allocationMetaSchema.index({ key: 1 }, { unique: true });
-
 export default mongoose.model("AllocationMeta", allocationMetaSchema);

@@ -6,7 +6,7 @@ const approvedPairingSchema = new mongoose.Schema({
   approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   approvedAt: { type: Date, default: Date.now },
   weightSnapshot: { type: Object }, // record weights at approval time for audit
-}, { timestamps: true, indexes: true });
+}, { timestamps: true });
 
 approvedPairingSchema.index({ studentIdA: 1, studentIdB: 1 }, { unique: true });
 
