@@ -9,6 +9,35 @@ import { adminCreateAllocation, listAllocations } from "../controllers/allocatio
 
 const router = express.Router();
 
+/**
+ * @swagger
+ * tags:
+ *   name: Admin
+ *   description: Admin management and reporting
+ */
+
+/**
+ * @swagger
+ * /api/admin/admins:
+ *   post:
+ *     summary: Create a new admin (super-admin only)
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name, email, password]
+ *             properties:
+ *               name: { type: string }
+ *               email: { type: string }
+ *               password: { type: string }
+ *     responses:
+ *       201: { description: Admin created }
+ *       403: { description: Forbidden }
+ */
 // super-admin creates admin
 router.post("/admins", protect, permit("super-admin"), createAdminUser);
 

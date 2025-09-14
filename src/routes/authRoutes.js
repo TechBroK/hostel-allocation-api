@@ -5,20 +5,69 @@ import { register, login } from "../controllers/authController.js";
 const router = express.Router();
 
 /**
- * @route   POST /api/auth/register
- * @desc    Register a new student
- * @access  Public
- * @body    { fullName, email, password, matricNumber?, level?, phone? }
- * @returns { id, status }
+ * @swagger
+ * tags:
+ *   name: Auth
+ *   description: Authentication endpoints
+ */
+
+/**
+ * @swagger
+ * /api/auth/register:
+ *   post:
+ *     summary: Register a new student user
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [fullName, email, password]
+ *             properties:
+ *               fullName:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *               matricNumber:
+ *                 type: string
+ *               level:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Student registered
+ *       400:
+ *         description: Validation error
  */
 router.post("/register", register);
 
 /**
- * @route   POST /api/auth/login
- * @desc    Login with email + password
- * @access  Public
- * @body    { email, password }
- * @returns { token, user }
+ * @swagger
+ * /api/auth/login:
+ *   post:
+ *     summary: Login and obtain a JWT
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, password]
+ *             properties:
+ *               email:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Authenticated successfully
+ *       401:
+ *         description: Invalid credentials
  */
 router.post("/login", login);
 

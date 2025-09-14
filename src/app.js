@@ -10,11 +10,15 @@ import allocationRoutes from "./routes/allocationRoutes.js";
 import complaintRoutes from "./routes/complaintRoutes.js";
 import connectDB from "./config/db.js";
 import cors from "cors";
+import swaggerUi from "swagger-ui-express";
+import swaggerSpec from "./config/swagger.js";
 
 dotenv.config();
 const app = express();
 app.use(express.json());
 app.use(cors());
+
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 connectDB();
 
