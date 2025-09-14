@@ -10,6 +10,7 @@ import adminRoutes from "./routes/adminRoutes.js";
 import hostelRoutes from "./routes/hostelRoutes.js";
 import roomRoutes from "./routes/roomRoutes.js";
 import allocationRoutes from "./routes/allocationRoutes.js";
+import autoAllocationRoutes from "./routes/autoAllocationRoutes.js";
 import complaintRoutes from "./routes/complaintRoutes.js";
 import connectDB from "./config/db.js";
 import swaggerSpec from "./config/swagger.js";
@@ -32,6 +33,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/hostels", hostelRoutes);
 app.use("/api/rooms", roomRoutes);
 app.use("/api/allocations", allocationRoutes);
+app.use("/api/allocations", autoAllocationRoutes);
 app.use("/api/complaints", complaintRoutes);
 
 app.get("/", (req, res) => {

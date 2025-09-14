@@ -3,7 +3,8 @@ import express from "express";
 import multer from "multer";
 
 import { protect } from "../middleware/authMiddleware.js";
-import { getProfile, updateProfile, uploadAvatar, getRoommate } from "../controllers/studentController.js";
+import { getProfile, updateProfile, uploadAvatar, getRoommate, updatePersonalityTraits } from "../controllers/studentController.js";
+import { updatePersonalitySchema } from "../validators/personality.validator.js";
 import { validate } from "../middleware/validate.js";
 import { updateProfileSchema, studentIdParamSchema } from "../validators/student.validator.js";
 
@@ -61,6 +62,7 @@ router.get("/:studentId/profile", protect, validate(studentIdParamSchema), getPr
  *       200: { description: Updated }
  */
 router.put("/:studentId/profile", protect, validate(studentIdParamSchema), validate(updateProfileSchema), updateProfile);
+router.put("/:studentId/personality", protect, validate(studentIdParamSchema), validate(updatePersonalitySchema), updatePersonalityTraits);
 
 /**
  * @swagger

@@ -3,7 +3,7 @@ import express from "express";
 
 import { protect } from "../middleware/authMiddleware.js";
 import { permit } from "../middleware/roleMiddleware.js";
-import { submitAllocation, adminCreateAllocation, listAllocations, getAllocationStatus } from "../controllers/allocationController.js";
+import { submitAllocation, adminCreateAllocation, listAllocations, getAllocationStatus, getMatchSuggestions, approvePairing, getApprovedPairings } from "../controllers/allocationController.js";
 import { validate } from "../middleware/validate.js";
 import { submitAllocationSchema, adminCreateAllocationSchema, studentIdParamSchema } from "../validators/allocation.validator.js";
 
@@ -59,6 +59,56 @@ router.post("/", protect, validate(submitAllocationSchema), submitAllocation);
 
 // get status for student
 router.get("/:studentId/status", protect, validate(studentIdParamSchema), getAllocationStatus);
+
+/**
+ * @swagger
+ * /api/allocations/{studentId}/match-suggestions:
+ *   get:
+ *     summary: Generate compatibility-based match suggestions for a student
+ *     tags: [Allocations]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: studentId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Suggestions grouped by range }
+ */
+router.get("/:studentId/match-suggestions", protect, validate(studentIdParamSchema), getMatchSuggestions);
+
+/**
+ * @swagger
+ * /api/allocations/approved-pairings:
+ *   get:
+ *     summary: List admin-approved pairings (in-memory placeholder)
+ *     tags: [Allocations]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Approved pairings list }
+ */
+router.get("/approved-pairings", protect, permit("admin"), getApprovedPairings);
+
+/**
+ * @swagger
+ * /api/allocations/approve-pairing:
+ *   post:
+ *     summary: Approve a pairing (stores for adaptive weighting)
+ *     tags: [Allocations]
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               studentIdA: { type: string }
+ *               studentIdB: { type: string }
+ *     responses:
+ *       201: { description: Pairing recorded }
+ */
+router.post("/approve-pairing", protect, permit("admin"), approvePairing);
 
 /**
  * @swagger

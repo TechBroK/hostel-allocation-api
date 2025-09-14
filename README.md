@@ -362,7 +362,93 @@ npm run lint:fix && npm run lint
 
 ---
 
-## 🧭 Roadmap Ideas
+## 🧩 Compatibility & Allocation Algorithm
+
+## � Roadmap Ideas
+
+### Personality Trait Model
+
+Stored on each `User` under `personalityTraits`:
+
+```json
+{
+  "sleepSchedule": "early|flexible|late",
+  "studyHabits": "quiet|mixed|group",
+  "cleanlinessLevel": 1,
+  "socialPreference": "introvert|balanced|extrovert",
+  "noisePreference": "quiet|tolerant|noisy",
+  "hobbies": ["reading","basketball"],
+  "musicPreference": "afrobeat",
+  "visitorFrequency": "rarely|sometimes|often"
+}
+```
+
+### Normalization
+
+Categorical traits are mapped to a 0..1 scale (e.g. `early -> 0`, `flexible -> 0.5`, `late -> 1`). `cleanlinessLevel` (1–5) is scaled to 0..1. Hobbies use Jaccard similarity; music is exact match or neutral (0.5 if unspecified).
+
+### Similarity Calculation
+
+1. Base vector similarity (default: weighted cosine). Optional weighted Euclidean can be toggled.
+2. Affinity (hobbies + music) blended at 25% weight.
+3. Penalties applied for extreme mismatches (sleep, cleanliness, noise) > 0.8 distance.
+4. Result scaled to integer percentage (0–100).
+
+### Compatibility Ranges (Updated)
+
+| Range | Score | Meaning | Default Status |
+|-------|-------|---------|----------------|
+| veryHigh | 85–100 | Exceptional alignment | auto-pair (capacity permitting) |
+| high | 70–84 | Strong match | suggest / fast-track |
+| moderate | 55–69 | Viable but review | needs-admin |
+| low | <55 | Poor fit | reject |
+
+### Endpoint: Match Suggestions
+
+`GET /api/allocations/:studentId/match-suggestions`
+
+Returns grouped compatibility suggestions (keys: `veryHigh`, `high`, `moderate`, `low`, `all`).
+
+### Admin Approval & Adaptive Weights
+
+Persisted approvals stored in `ApprovedPairing`.
+
+Endpoints:
+
+- `POST /api/allocations/approve-pairing` (admin)
+- `GET /api/allocations/approved-pairings` (admin)
+
+
+Every 25 approvals lightly boosts cleanliness & sleep weights (demo adaptation).
+
+### Personality Traits Update
+
+`PUT /api/students/:studentId/personality` updates trait profile; cached suggestions automatically invalidate via signature change.
+
+### Suggestions Caching
+
+In-memory TTL cache (5 minutes) keyed by `studentId|traitSignature` to avoid recomputation for unchanged traits.
+
+### Auto Allocation Endpoint
+
+`POST /api/allocations/auto-allocate` (admin) creates two approved allocations if compatibility range is `veryHigh` or `high` and room capacity allows.
+
+### Future ML Enhancement Ideas
+
+- Persist historical pairings + outcomes (feedback ratings) to a `PairingFeedback` collection.
+- Replace heuristic penalty with learned coefficients (e.g., logistic regression over “satisfied vs not”).
+- Consider clustering to pre-group compatible cohorts before individual pairing.
+- Introduce negative feedback loops (e.g., conflict reports) to decay certain trait weightings.
+
+### Integration Notes
+
+- Algorithm is pure & side-effect free (except for optional approval recording) → easy to test.
+- Room capacity + hostel gender constraints are enforced separately (this module only ranks human compatibility).
+- Add caching layer keyed by `traitSignature(user)` if performance becomes a concern at scale.
+
+---
+
+## �🧭 Roadmap Ideas
 
 - Pagination for listings (hostels, rooms, allocations)
 - Search & filtering (capacity, availability)

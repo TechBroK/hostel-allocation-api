@@ -8,6 +8,16 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   role: { type: String, enum: ["student", "admin", "super-admin"], default: "student" },
   level: String,
+  personalityTraits: {
+    sleepSchedule: String,
+    studyHabits: String,
+    cleanlinessLevel: { type: Number, min: 1, max: 5 },
+    socialPreference: String,
+    noisePreference: String,
+    hobbies: [String],
+    musicPreference: String,
+    visitorFrequency: String,
+  },
 });
 
 export default mongoose.model("User", userSchema);

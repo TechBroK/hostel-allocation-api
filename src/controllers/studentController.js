@@ -52,6 +52,28 @@ export const updateProfile = async (req, res, next) => {
   }
 };
 
+export const updatePersonalityTraits = async (req, res, next) => {
+  try {
+    const { studentId } = req.params;
+    if (req.user.role !== "admin" && req.user._id.toString() !== studentId) {
+      throw new ForbiddenError("Forbidden");
+    }
+    const user = await User.findById(studentId);
+    if (!user) {
+      throw new NotFoundError("Student not found");
+    }
+    const traits = req.validated?.body?.personalityTraits || req.body.personalityTraits;
+    if (!traits || Object.keys(traits).length === 0) {
+      throw new ValidationError("No traits provided");
+    }
+    user.personalityTraits = { ...(user.personalityTraits || {}), ...traits };
+    await user.save();
+    return res.json({ status: "updated", personalityTraits: user.personalityTraits });
+  } catch (err) {
+    return next(err);
+  }
+};
+
 // avatar upload handler (expects multer has run and put file on req.file)
 export const uploadAvatar = async (req, res, next) => {
   try {
