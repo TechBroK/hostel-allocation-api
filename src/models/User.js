@@ -7,6 +7,7 @@ const userSchema = new mongoose.Schema({
   phone: String,
   password: { type: String, required: true },
   role: { type: String, enum: ["student", "admin", "super-admin"], default: "student" },
+  gender: { type: String, enum: ["male", "female"], index: true },
   level: String,
   personalityTraits: {
     sleepSchedule: String,

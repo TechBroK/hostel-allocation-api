@@ -1,21 +1,21 @@
-// Lightweight logger abstraction (can swap with Winston/Pino later)
-const levels = ["debug", "info", "warn", "error"];
+import pino from 'pino';
 
-function log(level, ...args) {
-  if (!levels.includes(level)) {
-    level = "info";
-  }
-  const ts = new Date().toISOString();
-  // Simple structured style; replace with real logger in future
-  // eslint-disable-next-line no-console
-  console[level === "debug" ? "log" : level](`[${ts}] [${level.toUpperCase()}]`, ...args);
+// LOG_LEVEL env var or default
+const level = process.env.LOG_LEVEL || 'info';
+
+// Configure base pino instance (pretty-print can be layered externally in dev using pino-pretty)
+export const logger = pino({
+  level,
+  base: undefined, // omit pid/hostname for lean logs
+  timestamp: () => `,"time":"${new Date().toISOString()}"`
+});
+
+export function logInfo(event, data = {}) {
+  logger.info({ event, ...data });
 }
 
-export const logger = {
-  debug: (...a) => log("debug", ...a),
-  info: (...a) => log("info", ...a),
-  warn: (...a) => log("warn", ...a),
-  error: (...a) => log("error", ...a)
-};
+export function logError(event, data = {}) {
+  logger.error({ event, ...data });
+}
 
-export default logger;
+export default { logInfo, logError, logger };

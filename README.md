@@ -16,6 +16,10 @@ A Node.js/Express REST API for managing student hostel allocations, rooms, hoste
 - Basic reporting endpoints (summary/export placeholders)
 - Centralized Swagger (OpenAPI 3.0) documentation at `/api-docs`
 - Modular route & controller structure
+- Gender-aware hostel allocation (user schema now includes optional `gender` enum male/female; enforced against hostel `type`).
+- Fairness-based (round-robin) hostel rotation for auto-pairing to reduce bias toward early-listed hostels.
+- Conflict resolution worker scans stale pending allocations and attempts fairness-based pairing.
+- Structured JSON logging for allocation submissions and reallocations with duration metrics.
 
 ---
 
@@ -75,6 +79,11 @@ PORT=8080
 SUPER_ADMIN_EMAIL=superadmin@example.com
 SUPER_ADMIN_PASSWORD=SuperAdmin@123
 SUPER_ADMIN_NAME=Super Admin
+# Fairness / worker tuning
+ALLOCATION_STALE_MINUTES=10
+CONFLICT_RESOLVER_INTERVAL_MS=60000
+CONFLICT_RESOLVER_BATCH=25
+CONFLICT_RESOLVER_DISABLED=0
 ```
 
 ---
@@ -151,6 +160,7 @@ Request body fields (validated):
 
 Sample curl (super-admin creating first admin):
 
+ 
 ```bash
 curl -X POST http://localhost:8080/api/admin/admins \
   -H "Authorization: Bearer $SUPER_TOKEN" \
@@ -169,6 +179,7 @@ curl -X POST http://localhost:8080/api/admin/admins \
 
 Expected 201 response:
 
+ 
 ```json
 { "id": "<mongoId>", "status": "admin created" }
 ```
@@ -245,6 +256,7 @@ Stored temporarily in `uploads/`. For production, integrate a cloud provider (S3
 
 ## 🧾 Example Login Request
 
+ 
 ```bash
 curl -X POST http://localhost:8080/api/auth/login \
   -H 'Content-Type: application/json' \
@@ -252,6 +264,7 @@ curl -X POST http://localhost:8080/api/auth/login \
 ```
 Response:
 
+ 
 ```json
 {
   "token": "<jwt>",
@@ -429,9 +442,42 @@ Every 25 approvals lightly boosts cleanliness & sleep weights (demo adaptation).
 
 In-memory TTL cache (5 minutes) keyed by `studentId|traitSignature` to avoid recomputation for unchanged traits.
 
-### Auto Allocation Endpoint
+### Auto Allocation
 
-`POST /api/allocations/auto-allocate` (admin) creates two approved allocations if compatibility range is `veryHigh` or `high` and room capacity allows.
+Two mechanisms now reduce admin overhead:
+
+1. Student submission auto-pairing: when a student submits an allocation request, the system attempts to find a compatible (veryHigh/high) pending student and selects the "best" room (heuristic: highest free capacity ratio, light jitter tie-break) with at least 2 free slots. If successful, both are immediately approved and assigned inside a MongoDB transaction.
+2. Admin batch auto allocation (legacy): `POST /api/allocations/auto-allocate` can still be used for explicit pairing when needed.
+
+### Reallocation (Admin)
+
+`PATCH /api/allocations/:allocationId/reallocate` with body `{ "targetRoomId": "..." }` moves a student to another room (under a MongoDB transaction) if:
+
+- Target room has free capacity
+- Compatibility with every existing occupant is >= moderate
+- Occupant counts are updated atomically
+
+On success:
+
+```json
+{ "status": "reallocated", "allocationId": "...", "roomId": "..." }
+```
+
+If compatibility fails with any occupant, the reallocation is rejected (no partial updates thanks to the transaction).
+
+### Transactional Safety
+
+Auto-pairing during submission and reallocation operations run inside MongoDB transactions to avoid race conditions (e.g., two simultaneous submissions grabbing the last slots). Duplicate allocation attempts per session are guarded by a compound unique index (`student + session`).
+
+### Uniqueness Constraint
+
+`Allocation` schema defines `index({ student: 1, session: 1 }, { unique: true })`. Duplicate key errors are surfaced as validation errors with a clear message.
+
+### Smarter Room Selection (Heuristic)
+
+- Filters rooms with available capacity.
+- Scores each by `(1 - occupied/capacity) + jitter` to prioritize rooms that keep capacity utilization balanced.
+- Future improvements: cluster-compatible cohorts, gender-specific hostel filtering (pending gender field on `User`), fairness rotation.
 
 ### Future ML Enhancement Ideas
 
@@ -448,7 +494,7 @@ In-memory TTL cache (5 minutes) keyed by `studentId|traitSignature` to avoid rec
 
 ---
 
-## �🧭 Roadmap Ideas
+## 🧭 Roadmap Ideas
 
 - Pagination for listings (hostels, rooms, allocations)
 - Search & filtering (capacity, availability)
@@ -492,6 +538,36 @@ npm test
 - Keep `swagger.js` schemas updated as models evolve
 - Consider extracting validation (e.g., Joi/Zod) for request payloads
 - Add a logger (Winston / Pino) instead of `console.log` for production
+
+### Current Logging Implementation (Pino)
+
+This project now uses `pino` for structured logging. Core allocation operations emit events:
+
+Events:
+
+- `allocation.submit.success|error`
+- `allocation.reallocate.success|error`
+- `conflictResolver.start|cycle|disabled|error`
+
+Set log level via `LOG_LEVEL` (default `info`). Example `.env` addition:
+
+```bash
+LOG_LEVEL=debug
+```
+
+Sample output line (JSON):
+
+```json
+{"level":30,"time":"2025-09-14T12:00:00.000Z","event":"allocation.submit.success","allocationId":"...","paired":true,"compatibilityRange":"high","durationMs":57}
+```
+
+For pretty local viewing:
+
+```bash
+node src/app.js | npx pino-pretty
+```
+
+You can ship these logs directly to ELK / Loki / CloudWatch without transformation.
 
 ---
 

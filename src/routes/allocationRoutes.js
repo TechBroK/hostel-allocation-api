@@ -81,7 +81,8 @@ router.get("/:studentId/match-suggestions", protect, validate(studentIdParamSche
  * @swagger
  * /api/allocations/approved-pairings:
  *   get:
- *     summary: List admin-approved pairings (in-memory placeholder)
+ *     summary: (Deprecated) List admin-approved pairings (legacy learning mechanism)
+ *     deprecated: true
  *     tags: [Allocations]
  *     security: [{ bearerAuth: [] }]
  *     responses:
@@ -93,7 +94,8 @@ router.get("/approved-pairings", protect, permit("admin"), getApprovedPairings);
  * @swagger
  * /api/allocations/approve-pairing:
  *   post:
- *     summary: Approve a pairing (stores for adaptive weighting)
+ *     summary: (Deprecated) Approve a pairing (legacy adaptive weighting)
+ *     deprecated: true
  *     tags: [Allocations]
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
