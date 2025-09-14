@@ -121,7 +121,72 @@ Use the "Authorize" button and paste: `Bearer <your_jwt_token>` after logging in
 Authorization: Bearer <token>
 ```
 
-4. Super-admin creates admin: `POST /api/admin/admins`
+4. Super-admin OR existing admin creates another admin: `POST /api/admin/admins`
+
+### Creating Admin Users
+
+There are two ways administrators enter the system:
+
+1. Initial super-admin (seed script) – has role `super-admin`.
+2. Any existing `super-admin` or `admin` can create a new `admin` via the protected endpoint.
+
+Endpoint:
+
+```http
+POST /api/admin/admins
+Authorization: Bearer <token-of-super-admin-or-admin>
+Content-Type: application/json
+```
+
+Request body fields (validated):
+
+```json
+{
+  "fullName": "Jane Admin",
+  "email": "jane.admin@example.com",
+  "password": "StrongP@ssw0rd",
+  "phone": "+2348012345678"
+}
+```
+
+Sample curl (super-admin creating first admin):
+
+```bash
+curl -X POST http://localhost:8080/api/admin/admins \
+  -H "Authorization: Bearer $SUPER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"fullName":"Jane Admin","email":"jane.admin@example.com","password":"StrongP@ssw0rd"}'
+```
+
+Sample curl (admin creating another admin):
+
+```bash
+curl -X POST http://localhost:8080/api/admin/admins \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"fullName":"Second Admin","email":"second.admin@example.com","password":"AnotherStr0ng!"}'
+```
+
+Expected 201 response:
+
+```json
+{ "id": "<mongoId>", "status": "admin created" }
+```
+
+Recommendation: Log/admin-audit each admin creation (who created whom + timestamp + IP) and consider adding rate limiting to this endpoint.
+
+Error scenarios:
+
+- 400 if email already exists
+- 400 if required fields missing
+- 401 if missing / invalid token
+- 403 if caller is neither super-admin nor admin
+
+To obtain the initial super-admin token:
+
+1. Run the seed script `npm run create-super-admin` (if not already seeded).
+2. Login with that email/password using `POST /api/auth/login`.
+3. Use returned `token` for Authorization header above.
 
 ---
 
@@ -163,7 +228,7 @@ Authorization: Bearer <token>
 
 ### Admin Utilities
 
-- `POST /api/admin/admins` (super-admin)
+- `POST /api/admin/admins` (super-admin or admin)
 - `GET /api/admin/reports/summary` (admin)
 - `GET /api/admin/reports/export` (admin)
 
@@ -186,11 +251,80 @@ curl -X POST http://localhost:8080/api/auth/login \
   -d '{"email":"student@example.com","password":"Passw0rd!"}'
 ```
 Response:
+
 ```json
 {
   "token": "<jwt>",
   "user": { "_id": "...", "email": "student@example.com", "role": "student" }
 }
+```
+
+---
+
+## 🧑‍💼 Admin vs Super-Admin Capabilities
+
+| Action | student | admin | super-admin |
+|--------|---------|-------|-------------|
+| Register / Login | ✅ | ✅ | ✅ |
+| Submit allocation | ✅ | ✅ | ✅ |
+| Manage hostels / rooms | ❌ | ✅ | ✅ |
+| Create admin user | ❌ | ✅ | ✅ |
+| Export reports | ❌ | ✅ | ✅ |
+
+---
+
+## 📊 Pagination & Metadata
+
+List endpoints (e.g., `/api/hostels`, `/api/rooms/hostel/:hostelId`, `/api/allocations`, `/api/admin/students`) accept query params:
+
+```text
+?page=1&limit=20
+```
+Response format:
+
+```json
+{
+  "data": [ ...items ],
+  "meta": { "page": 1, "limit": 20, "total": 57, "pageCount": 3 }
+}
+```
+
+Defaults: `page=1`, `limit=20`, max limit = 100.
+
+---
+
+## 🩺 Health Check
+
+`GET /healthz` returns service + database connectivity snapshot:
+
+
+```json
+{
+  "status": "ok",
+  "uptime": 123.45,
+  "timestamp": "2025-09-14T10:11:12.345Z",
+  "db": "connected"
+}
+```
+
+---
+
+## 🧰 Linting & Formatting
+
+Project uses ESLint (flat config) + Prettier.
+
+Scripts:
+
+```bash
+npm run lint      # analyze code
+npm run lint:fix  # auto-fix where possible
+```
+Prettier settings in `.prettierrc` (width 90, double quotes, semicolons). Editor settings normalized by `.editorconfig`.
+
+Recommended workflow before commit:
+
+```bash
+npm run lint:fix && npm run lint
 ```
 
 ---
@@ -223,6 +357,8 @@ Response:
 - Password complexity validation
 - Refresh token rotation strategy (if sessions needed)
 - Central error handler middleware
+- Audit logging (admin creations, failed logins)
+- Enforce account lockout after repeated failed auth attempts
 
 ---
 

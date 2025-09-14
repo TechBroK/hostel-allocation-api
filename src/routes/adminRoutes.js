@@ -27,7 +27,7 @@ const router = express.Router();
  * @swagger
  * /api/admin/admins:
  *   post:
- *     summary: Create a new admin (super-admin only)
+ *     summary: Create a new admin (super-admin or existing admin)
  *     tags: [Admin]
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
@@ -46,7 +46,7 @@ const router = express.Router();
  *       403: { description: Forbidden }
  */
 // super-admin creates admin
-router.post("/admins", protect, permit("super-admin"), validate(registerSchema), createAdminUser);
+router.post("/admins", protect, permit("super-admin", "admin"), validate(registerSchema), createAdminUser);
 
 // students
 router.get("/students", protect, permit("admin"), listStudents);
