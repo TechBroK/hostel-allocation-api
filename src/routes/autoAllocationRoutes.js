@@ -1,6 +1,7 @@
 import express from "express";
 
-import { protect, permit } from "../middleware/authMiddleware.js";
+import { protect } from "../middleware/authMiddleware.js";
+import { permit } from "../middleware/roleMiddleware.js";
 import { autoAllocatePair } from "../controllers/allocationController.js";
 
 const router = express.Router();
@@ -31,6 +32,8 @@ const router = express.Router();
  *       403:
  *         description: Forbidden
  */
-router.post("/auto-allocate", protect, permit("admin"), autoAllocatePair);
+// NOTE: The previous version incorrectly called protect("admin") which returned a non-function (protect expects no args).
+// Correct chain: authenticate first, then authorize by role.
+router.post("/auto-allocate", protect, permit("admin", "super-admin"), autoAllocatePair);
 
 export default router;

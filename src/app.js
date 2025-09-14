@@ -15,7 +15,9 @@ import complaintRoutes from "./routes/complaintRoutes.js";
 import connectDB from "./config/db.js";
 import swaggerSpec from "./config/swagger.js";
 import { notFound, errorHandler } from "./middleware/errorMiddleware.js";
-import logger from "./utils/logger.js";
+import loggerModule from "./utils/logger.js";
+
+const { logInfo } = loggerModule;
 
 dotenv.config();
 const app = express();
@@ -56,4 +58,4 @@ app.get('/healthz', async (req, res) => {
 app.use(notFound);
 app.use(errorHandler);
 
-app.listen(8080, () => logger.info(`Server running on port 8080`));
+app.listen(8080, () => logInfo('server.start', { message: 'Server running on port 8080' }));

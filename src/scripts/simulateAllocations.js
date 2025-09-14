@@ -60,7 +60,7 @@ function loadTokens(authFile) {
 async function submitAllocation(baseUrl, token, session, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
+  try {     
     const res = await axios.post(`${baseUrl}/api/allocations`, { session }, {
       headers: { Authorization: `Bearer ${token}` },
       signal: controller.signal
