@@ -3,13 +3,14 @@ import express from "express";
 import { protect } from "../middleware/authMiddleware.js";
 import { permit } from "../middleware/roleMiddleware.js";
 import { listStudents, updateStudentStatus, getSummary, exportReport, createAdminUser } from "../controllers/adminController.js";
-// super-admin creates admin
-router.post("/admins", protect, permit("super-admin"), createAdminUser);
 import { createHostel, listHostels } from "../controllers/hostelController.js";
 import { createRoom, listRoomsByHostel } from "../controllers/roomController.js";
 import { adminCreateAllocation, listAllocations } from "../controllers/allocationController.js";
 
 const router = express.Router();
+
+// super-admin creates admin
+router.post("/admins", protect, permit("super-admin"), createAdminUser);
 
 // students
 router.get("/students", protect, permit("admin"), listStudents);

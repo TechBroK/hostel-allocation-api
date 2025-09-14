@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "src/app.js",
   "scripts": {
+    "start": "node src/app.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "create-super-admin": "node src/createSuperAdmin.js"
   },
@@ -18,5 +19,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.18.1",
     "multer": "^2.0.2"
-  }
+  },
+  "type": "module"
 }
+    
