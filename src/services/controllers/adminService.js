@@ -1,0 +1,78 @@
+import bcrypt from 'bcryptjs';
+
+import User from '../../models/User.js';
+import Allocation from '../../models/Allocation.js';
+import Room from '../../models/Room.js';
+import { ValidationError, NotFoundError } from '../../errors/AppError.js';
+import { getPaginationParams, buildPagedResponse } from '../../utils/pagination.js';
+
+export async function listStudentsService(query) {
+  const { page, limit, skip } = getPaginationParams(query);
+  const [students, total] = await Promise.all([
+    User.find({ role: 'student' }).select('fullName matricNumber level email').skip(skip).limit(limit),
+    User.countDocuments({ role: 'student' })
+  ]);
+  const studentsWithStatus = await Promise.all(students.map(async (s) => {
+    const allocation = await Allocation.findOne({ student: s._id }).sort({ allocatedAt: -1 }).lean();
+    return { id: s._id, fullName: s.fullName, matricNumber: s.matricNumber, level: s.level, status: allocation ? allocation.status : 'pending' };
+  }));
+  return buildPagedResponse({ items: studentsWithStatus, total, page, limit });
+}
+
+export async function createAdminUserService(data) {
+  const { fullName, name, email, password, phone } = data;
+  const effectiveName = fullName || name;
+  if (!effectiveName || !email || !password) {
+    throw new ValidationError('name/fullName, email and password required');
+  }
+  const existing = await User.findOne({ email });
+  if (existing) { throw new ValidationError('Email already in use'); }
+  const hashed = await bcrypt.hash(password, 10);
+  const admin = await User.create({ fullName: effectiveName, email, password: hashed, phone, role: 'admin' });
+  return { id: admin._id, status: 'admin created' };
+}
+
+export async function updateStudentStatusService(studentId, status) {
+  if (!['allocated','pending','rejected'].includes(status)) { throw new ValidationError('Invalid status'); }
+  const allocation = await Allocation.findOne({ student: studentId }).sort({ allocatedAt: -1 });
+  if (!allocation) { throw new NotFoundError('Allocation not found for student'); }
+  allocation.status = status; await allocation.save();
+  return { id: allocation._id, status: allocation.status };
+}
+
+export async function getSummaryService() {
+  const totalStudents = await User.countDocuments({ role: 'student' });
+  const totalRooms = await Room.countDocuments();
+  const rooms = await Room.find().select('capacity occupied').lean();
+  const occupiedRooms = rooms.reduce((s, r) => s + (r.occupied || 0), 0);
+  const totalCapacity = rooms.reduce((s, r) => s + (r.capacity || 0), 0);
+  return { totalStudents, totalRooms, occupiedRooms, availableRooms: Math.max(0, totalCapacity - occupiedRooms) };
+}
+
+export async function exportReportService({ type='allocations', format='csv' }) {
+  if (format !== 'csv') { throw new ValidationError('Only csv export supported in this endpoint'); }
+  if (type === 'students') {
+    const students = await User.find({ role: 'student' }).select('fullName matricNumber email level').lean();
+    const header = 'id,fullName,matricNumber,email,level\n';
+    const csv = header + students.map((s) => `${s._id},${s.fullName},${s.matricNumber},${s.email},${s.level}`).join('\n');
+    return { filename: 'students.csv', csv };
+  }
+  if (type === 'rooms') {
+    const rooms = await Room.find().populate('hostel', 'name').lean();
+    const header = 'id,hostel,roomNumber,type,capacity,occupied\n';
+    const csv = header + rooms.map((r) => `${r._id},${r.hostel?.name || ''},${r.roomNumber},${r.type},${r.capacity},${r.occupied || 0}`).join('\n');
+    return { filename: 'rooms.csv', csv };
+  }
+  const allocs = await Allocation.find().populate('student', 'fullName matricNumber').populate('room', 'roomNumber').lean();
+  const header = 'id,student,matricNumber,roomNumber,status,allocatedAt\n';
+  const csv = header + allocs.map((a) => `${a._id},${a.student?.fullName || ''},${a.student?.matricNumber || ''},${a.room?.roomNumber || ''},${a.status},${a.allocatedAt || ''}`).join('\n');
+  return { filename: 'allocations.csv', csv };
+}
+
+export default {
+  listStudentsService,
+  createAdminUserService,
+  updateStudentStatusService,
+  getSummaryService,
+  exportReportService
+};

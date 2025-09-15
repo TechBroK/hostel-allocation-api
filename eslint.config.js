@@ -17,8 +17,9 @@ export default [
       ecmaVersion: 2023,
       sourceType: 'module',
       globals: {
-        ...globals.node,
-        ...globals.es2021
+  ...globals.node,
+  ...globals.es2021,
+  ...globals.jest
       }
     },
     plugins: {
