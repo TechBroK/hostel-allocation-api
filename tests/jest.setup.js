@@ -1,4 +1,5 @@
-import { MongoMemoryServer } from 'mongodb-memory-server';
+// Use replica set memory server so Mongo transactions (used in allocation flows) work
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import mongoose from 'mongoose';
 import { jest } from '@jest/globals';
 
@@ -9,7 +10,12 @@ let mongo;
 
 beforeAll(async () => {
   process.env.NODE_ENV = 'test';
-  mongo = await MongoMemoryServer.create();
+  if (!process.env.JWT_SECRET) {
+    process.env.JWT_SECRET = 'test-secret-key';
+  }
+  mongo = await MongoMemoryReplSet.create({
+    replSet: { storageEngine: 'wiredTiger', count: 1 },
+  });
   const uri = mongo.getUri();
   await mongoose.connect(uri, { dbName: 'test' });
 });
