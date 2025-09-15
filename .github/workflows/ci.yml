@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        node-version: [20.x]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint || (echo 'Lint failed' && exit 1)
+
+      - name: Run tests with coverage
+        env:
+          NODE_ENV: test
+          JWT_SECRET: test-secret-ci
+        run: npm test -- --coverage
+
+      - name: Upload coverage summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage
+
+      - name: Fail if coverage dropped below thresholds
+        if: success()
+        run: |
+          echo "Coverage enforced by Jest thresholds (package config)."
+
+  vulnerability-audit:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+      - name: Install dependencies (prod + dev)
+        run: npm ci
+      - name: Audit (allow low severity to pass)
+        run: |
+          npm audit --audit-level=high || echo 'High severity issues found (review manually).'

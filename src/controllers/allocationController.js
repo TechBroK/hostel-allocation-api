@@ -2,103 +2,37 @@
 import Allocation from "../models/Allocation.js";
 import Room from "../models/Room.js";
 import User from "../models/User.js";
-import { selectRoomForPair } from "../services/roomSelection.js";
 import { logInfo, logError } from "../utils/logger.js";
 import { ValidationError, ForbiddenError, NotFoundError } from "../errors/AppError.js";
 import { getPaginationParams, buildPagedResponse } from "../utils/pagination.js";
 import { allocateStudent, recordApprovedPairing, listApprovedPairings, traitSignature, getCachedSuggestions, cacheSuggestions, computeCompatibility } from "../services/allocationAlgorithm.js";
+import { submitStudentAllocation } from "../services/allocationSubmission.js";
 
 export const submitAllocation = async (req, res, next) => {
   try {
-  const t0 = Date.now();
-  const sessionMongo = await Allocation.startSession();
+    const t0 = Date.now();
+    const sessionMongo = await Allocation.startSession();
     sessionMongo.startTransaction();
     const studentId = req.user._id;
-  const { session } = req.validated || req.body;
-    const existing = await Allocation.findOne({ student: studentId, status: { $in: ["pending", "approved"] } });
-    if (existing) {
-      throw new ValidationError("You already have a pending/approved allocation");
-    }
-    const user = await User.findById(studentId).lean();
-    const academicSession = session || new Date().getFullYear().toString();
-
-    // Step 1: create a pending allocation placeholder
-    const allocation = await Allocation.create([{
-      student: studentId,
-      session: academicSession,
-      status: "pending",
-    }], { session: sessionMongo });
-    // create returns array when using with session + array input
-    const allocationDoc = Array.isArray(allocation) ? allocation[0] : allocation;
-
-    // Step 2: attempt auto pairing with another pending unassigned allocation
-    const pendingPeers = await Allocation.find({
-      _id: { $ne: allocation._id },
-      room: { $exists: false },
-      status: "pending",
-    }).populate("student").session(sessionMongo);
-
-    let paired = false;
-    let chosenPeer = null;
-    let compatibilityMeta = null;
-
-    for (const peerAlloc of pendingPeers) {
-      const peerUser = peerAlloc.student;
-  if (!peerUser) { continue; }
-      const { score, range } = computeCompatibility(user, peerUser.toObject ? peerUser.toObject() : peerUser);
-      if (["veryHigh", "high"].includes(range)) {
-        chosenPeer = peerAlloc;
-        compatibilityMeta = { score, range };
-        break;
-      }
-    }
-
-    if (chosenPeer) {
-      // Fairness-based selection: rotate hostels (respecting gender) and pick best room with >=2 free slots
-      const selectedRoomLean = await selectRoomForPair({ gender: user.gender, minFreeSlots: 2 });
-      if (selectedRoomLean) {
-        // Re-fetch room inside transaction/session for safe occupancy update & check capacity again
-        const selectedRoom = await Room.findById(selectedRoomLean._id).session(sessionMongo).populate("hostel");
-        if (selectedRoom && (selectedRoom.capacity - (selectedRoom.occupied || 0)) >= 2) {
-          if (user.gender && selectedRoom.hostel && selectedRoom.hostel.type && user.gender !== selectedRoom.hostel.type) {
-            // Gender mismatch discovered after re-fetch (rare if data changed) -> skip pairing (leave pending)
-          } else {
-            allocationDoc.room = selectedRoom._id;
-            allocationDoc.status = "approved";
-            allocationDoc.allocatedAt = new Date();
-            allocationDoc.compatibilityScore = compatibilityMeta.score;
-            allocationDoc.compatibilityRange = compatibilityMeta.range;
-            allocationDoc.autoPaired = true;
-            await allocationDoc.save({ session: sessionMongo });
-
-            chosenPeer.room = selectedRoom._id;
-            chosenPeer.status = "approved";
-            chosenPeer.allocatedAt = new Date();
-            chosenPeer.autoPaired = true;
-            chosenPeer.compatibilityScore = compatibilityMeta.score;
-            chosenPeer.compatibilityRange = compatibilityMeta.range;
-            await chosenPeer.save({ session: sessionMongo });
-
-            selectedRoom.occupied = (selectedRoom.occupied || 0) + 2;
-            await selectedRoom.save({ session: sessionMongo });
-            paired = true;
-          }
-        }
-      }
-    }
+    const { session: academicSessionLabel } = req.validated || req.body;
+    const { allocation, paired, compatibilityMeta } = await submitStudentAllocation({
+      session: sessionMongo,
+      studentId,
+      sessionLabel: academicSessionLabel
+    });
     await sessionMongo.commitTransaction();
     sessionMongo.endSession();
     logInfo('allocation.submit.success', {
-      allocationId: allocationDoc._id.toString(),
+      allocationId: allocation._id.toString(),
       paired,
       compatibilityRange: compatibilityMeta?.range,
       durationMs: Date.now() - t0
     });
     return res.status(201).json({
-      id: allocationDoc._id,
-      status: allocationDoc.status,
+      id: allocation._id,
+      status: allocation.status,
       autoPaired: paired,
-      roomId: allocationDoc.room || null,
+      roomId: allocation.room || null,
       compatibility: compatibilityMeta,
     });
   } catch (err) {

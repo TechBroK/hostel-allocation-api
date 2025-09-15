@@ -3,9 +3,10 @@ import express from "express";
 import multer from "multer";
 
 import { protect } from "../middleware/authMiddleware.js";
-import { getProfile, updateProfile, uploadAvatar, getRoommate, updatePersonalityTraits } from "../controllers/studentController.js";
+import { getProfile, updateProfile, uploadAvatar, getRoommate, updatePersonalityTraits, listStudents } from "../controllers/studentController.js";
+import { listStudentsQuerySchema } from '../validators/studentList.validator.js';
+import { validate } from '../middleware/validate.js';
 import { updatePersonalitySchema } from "../validators/personality.validator.js";
-import { validate } from "../middleware/validate.js";
 import { updateProfileSchema, studentIdParamSchema } from "../validators/student.validator.js";
 
 const router = express.Router();
@@ -17,6 +18,47 @@ const upload = multer({ dest: "uploads/" }); // customize for production (cloud 
  *   name: Students
  *   description: Student profile operations
  */
+
+/**
+ * @swagger
+ * /api/students:
+ *   get:
+ *     summary: List students (admin)
+ *     tags: [Students]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, minimum: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 1, maximum: 100 }
+ *       - in: query
+ *         name: gender
+ *         schema: { type: string, enum: [male, female] }
+ *     responses:
+ *       200:
+ *         description: Paged list of students
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 page: { type: integer }
+ *                 limit: { type: integer }
+ *                 total: { type: integer }
+ *                 totalPages: { type: integer }
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id: { type: string }
+ *                       fullName: { type: string }
+ *                       email: { type: string }
+ *                       gender: { type: string }
+ */
+router.get('/', protect, validate(listStudentsQuerySchema), listStudents);
 
 /**
  * @swagger

@@ -2,6 +2,81 @@
 import User from "../models/User.js";
 import Allocation from "../models/Allocation.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../errors/AppError.js";
+import { getPaginationParams, buildPagedResponse } from "../utils/pagination.js";
+
+export const listStudents = async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin') {
+      throw new ForbiddenError('Admin only');
+    }
+    const { page, limit, skip } = getPaginationParams(req.query);
+    const { q, gender, sort = 'createdAt:desc', allocationStatus } = req.query;
+
+    // Parse sort (field:direction[,field:direction...])
+    const sortSpec = {};
+    if (sort) {
+      const parts = String(sort).split(',');
+      for (const p of parts) {
+        const [field, dir] = p.split(':');
+        if (['fullName','email','createdAt'].includes(field)) {
+          sortSpec[field] = dir === 'asc' ? 1 : -1;
+        }
+      }
+    }
+    if (Object.keys(sortSpec).length === 0) { sortSpec.createdAt = -1; }
+
+    // Base match
+    const match = { role: 'student' };
+  if (gender) { match.gender = gender; }
+  if (q) {
+      const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      match.$or = [{ fullName: rx }, { email: rx }];
+    }
+
+    // Aggregation to optionally join allocation status
+    const pipeline = [
+      { $match: match },
+      { $lookup: { from: 'allocations', localField: '_id', foreignField: 'student', as: 'allocs' } },
+      { $addFields: { currentAllocation: { $first: {
+        $filter: { input: '$allocs', as: 'a', cond: { $in: ['$$a.status', ['pending','approved']] } }
+      } } } },
+    ];
+  if (allocationStatus === 'approved') {
+      pipeline.push({ $match: { 'currentAllocation.status': 'approved' } });
+  } else if (allocationStatus === 'pending') {
+      pipeline.push({ $match: { 'currentAllocation.status': 'pending' } });
+  } else if (allocationStatus === 'none') {
+      pipeline.push({ $match: { currentAllocation: { $eq: null } } });
+    }
+    pipeline.push(
+      { $sort: sortSpec },
+      { $skip: skip },
+      { $limit: limit },
+      { $project: { fullName:1, email:1, gender:1, createdAt:1, allocationStatus: '$currentAllocation.status' } }
+    );
+
+    const countPipeline = pipeline
+      .filter(st => !st.$skip && !st.$limit && !st.$project && !st.$sort) // remove paging stages
+      .concat([{ $count: 'total' }]);
+
+    // Run both (need to re-run base pipeline without skip/limit for total; simpler to clone)
+    const [items, totalArr] = await Promise.all([
+      User.aggregate(pipeline),
+      User.aggregate(countPipeline)
+    ]);
+    const total = totalArr[0]?.total || 0;
+    const paged = buildPagedResponse({ items, total, page, limit });
+    return res.json({
+      items: paged.data,
+      page: paged.meta.page,
+      limit: paged.meta.limit,
+      total: paged.meta.total,
+      totalPages: paged.meta.pageCount
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
 
 export const getProfile = async (req, res, next) => {
   try {
