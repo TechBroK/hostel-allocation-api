@@ -24,7 +24,10 @@ app.use(cors());
 
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-connectDB();
+// Only connect DB immediately if not in test environment. Tests can connect explicitly.
+if (process.env.NODE_ENV !== 'test') {
+  connectDB();
+}
 
 // Routes
 app.use("/api/auth", authRoutes);
@@ -56,4 +59,10 @@ app.get('/healthz', async (req, res) => {
 app.use(notFound);
 app.use(errorHandler);
 
-app.listen(8080, () => logInfo('server.start', { message: 'Server running on port 8080' }));
+// Start server only when not running tests (so Supertest can import the app without binding a port)
+if (process.env.NODE_ENV !== 'test') {
+  const PORT = process.env.PORT || 8080;
+  app.listen(PORT, () => logInfo('server.start', { message: `Server running on port ${PORT}` }));
+}
+
+export default app;
