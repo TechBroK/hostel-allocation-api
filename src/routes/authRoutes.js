@@ -26,10 +26,14 @@ const router = express.Router();
  *         application/json:
  *           schema:
  *             type: object
- *             required: [fullName, email, password]
+ *             required: [email, password]
  *             properties:
  *               fullName:
  *                 type: string
+ *                 description: Preferred full name (if both provided, fullName takes precedence)
+ *               name:
+ *                 type: string
+ *                 description: Alternative to fullName (one of fullName or name is required)
  *               email:
  *                 type: string
  *               password:
@@ -40,6 +44,9 @@ const router = express.Router();
  *                 type: string
  *               phone:
  *                 type: string
+ *             oneOf:
+ *               - required: [fullName]
+ *               - required: [name]
  *     responses:
  *       201:
  *         description: Student registered

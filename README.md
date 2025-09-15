@@ -20,6 +20,7 @@ A Node.js/Express REST API for managing student hostel allocations, rooms, hoste
 - Fairness-based (round-robin) hostel rotation for auto-pairing to reduce bias toward early-listed hostels.
 - Conflict resolution worker scans stale pending allocations and attempts fairness-based pairing.
 - Structured JSON logging for allocation submissions and reallocations with duration metrics.
+- Flexible name handling: registration & admin creation accept either `fullName` or `name` (with `fullName` taking precedence if both provided).
 
 ---
 
@@ -121,7 +122,7 @@ npm run seed:demo
 
 Options (pass as args):
 
-```
+```text
 students=150 hostelsPerGender=4 roomsPerHostel=18 complaints=40 session=2025
 ```
 
@@ -171,15 +172,15 @@ Parameters:
 
 | Param | Default | Description |
 |-------|---------|-------------|
-| baseUrl | http://localhost:8080 | API base URL |
+| baseUrl | `http://localhost:8080` | API base URL |
 | count | 50 | Total submissions to attempt |
 | concurrency | 10 | Parallel requests per batch |
 | delayBetweenBatchesMs | 250 | Delay after each batch (ms) |
 | authFile | (required) | Path to tokens file |
 | session | current year | Academic session value in body |
 | timeoutMs | 8000 | Per-request abort timeout |
-| mode | submit | submit | reallocate | mixed |
-| reallocateRatio | 0.3 | When mode=mixed, probability an attempt is a reallocate |
+| mode | submit | Allowed values: `submit`, `reallocate`, `mixed` |
+| reallocateRatio | 0.3 | When mode = mixed, probability an attempt is a reallocate |
 | adminAuthFile | (required for reallocate/mixed) | Path to admin tokens file |
 
 Output example (submit mode):
@@ -229,7 +230,7 @@ Field meanings:
 
 ## 📘 API Documentation (Swagger)
 
-Interactive docs: `http://localhost:8080/api-docs`
+Interactive docs: <http://localhost:8080/api-docs>
 Use the "Authorize" button and paste: `Bearer <your_jwt_token>` after logging in.
 
 ---
@@ -245,6 +246,36 @@ Authorization: Bearer <token>
 ```
 
 4. Super-admin OR existing admin creates another admin: `POST /api/admin/admins`
+
+### Name vs fullName (Alias Behavior)
+
+Both student registration and admin creation accept either `fullName` or `name`. Rules:
+
+- One of `fullName` or `name` is required.
+- If both are supplied, `fullName` takes precedence.
+- Stored field is always persisted as `fullName` internally.
+- Validation enforces minimum length of 2 characters.
+
+Examples:
+
+```jsonc
+// Using fullName
+{ "fullName": "Ada Lovelace", "email": "ada@example.com", "password": "Password123!" }
+
+// Using name
+{ "name": "Grace Hopper", "email": "grace@example.com", "password": "Password123!" }
+
+// Both provided (fullName wins)
+{ "fullName": "Katherine Johnson", "name": "Kathy J.", "email": "katherine@example.com", "password": "Password123!" }
+```
+
+Error when missing both:
+
+```json
+{ "message": "Either fullName or name is required" }
+```
+
+---
 
 ### Creating Admin Users
 
