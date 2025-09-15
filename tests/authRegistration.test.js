@@ -1,24 +1,11 @@
 // Jest auth registration tests moved from src/__tests__
 import request from 'supertest';
-import mongoose from 'mongoose';
-
 import app from '../src/app.js';
-import User from '../src/models/User.js';
 
 // Supertest will use the Express app directly; server not listening in test mode.
 
 describe('Auth Registration name/fullName alias', () => {
-  beforeAll(async () => {
-    process.env.NODE_ENV = 'test';
-    if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(process.env.MONGO_URI);
-    }
-  });
-
-  afterAll(async () => {
-    await User.deleteMany({ email: /test-alias-/ });
-    await mongoose.connection.close();
-  });
+  // Global setup handles DB lifecycle; tests remain independent via unique emails
 
   test('register with fullName works', async () => {
     const res = await request(app)
