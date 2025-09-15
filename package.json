@@ -42,12 +42,6 @@
     "prettier": "^3.3.3",
     "supertest": "^6.3.4"
   },
-  "jest": {
-    "testEnvironment": "node",
-    "globalSetup": "<rootDir>/jest.globalSetup.js",
-    "globalTeardown": "<rootDir>/jest.globalTeardown.js",
-    "setupFilesAfterEnv": [],
-    "testMatch": ["**/tests/**/*.test.js"]
-  },
+  
   "type": "module"
 }

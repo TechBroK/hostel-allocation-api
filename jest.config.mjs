@@ -2,6 +2,7 @@ export default {
   testEnvironment: 'node',
   transform: {}, // ESM/no Babel
   testMatch: ['**/tests/**/*.test.js'],
+  setupFilesAfterEnv: ['<rootDir>/tests/jest.setup.js'],
   verbose: true,
   collectCoverage: true,
   collectCoverageFrom: ['src/**/*.js','!src/**/swagger*.js'],
