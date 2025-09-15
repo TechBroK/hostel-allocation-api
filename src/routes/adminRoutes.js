@@ -11,7 +11,7 @@ import { validate } from "../middleware/validate.js";
 import { createHostelSchema } from "../validators/hostel.validator.js";
 import { createRoomSchema } from "../validators/room.validator.js";
 import { adminCreateAllocationSchema } from "../validators/allocation.validator.js";
-import { registerSchema } from "../validators/auth.validator.js";
+import { createAdminSchema } from "../validators/adminCreate.validator.js";
 import { updateStudentStatusSchema } from "../validators/admin.validator.js";
 
 const router = express.Router();
@@ -36,9 +36,10 @@ const router = express.Router();
  *         application/json:
  *           schema:
  *             type: object
- *             required: [name, email, password]
+ *             required: [email, password]  # name or fullName (one required)
  *             properties:
- *               name: { type: string }
+ *               name: { type: string, description: "Alias for fullName" }
+ *               fullName: { type: string, description: "Preferred field; 'name' also accepted" }
  *               email: { type: string }
  *               password: { type: string }
  *     responses:
@@ -46,7 +47,7 @@ const router = express.Router();
  *       403: { description: Forbidden }
  */
 // super-admin creates admin
-router.post("/admins", protect, permit("super-admin", "admin"), validate(registerSchema), createAdminUser);
+router.post("/admins", protect, permit("super-admin", "admin"), validate(createAdminSchema), createAdminUser);
 
 // students
 router.get("/students", protect, permit("admin"), listStudents);

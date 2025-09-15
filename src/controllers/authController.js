@@ -4,15 +4,15 @@ import jwt from "jsonwebtoken";
 
 import User from "../models/User.js";
 import { AuthError, ValidationError } from "../errors/AppError.js";
+import { extractRegistrationData } from "../validators/auth.validator.js";
 
 export const register = async (req, res, next) => {
   try {
     // Prefer validated payload if present
-    const { fullName, email, password, matricNumber, level, phone } = req.validated || req.body;
-
-    // Redundant guard (schema should enforce) but kept for backward safety
+    const base = req.validated || req.body;
+    const { fullName, email, password, matricNumber, level, phone } = extractRegistrationData(base);
     if (!fullName || !email || !password) {
-      throw new ValidationError("fullName, email and password required");
+      throw new ValidationError("fullName/name, email and password required");
     }
 
     const existing = await User.findOne({ email });

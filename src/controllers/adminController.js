@@ -28,16 +28,17 @@ export const listStudents = async (req, res, next) => {
   // Super-admin creates an admin user
   export const createAdminUser = async (req, res, next) => {
     try {
-      const { fullName, email, password, phone } = req.validated || req.body;
-      if (!fullName || !email || !password) {
-        throw new ValidationError("fullName, email and password required");
+      const { fullName, name, email, password, phone } = req.validated || req.body;
+      const effectiveName = fullName || name; // allow either
+      if (!effectiveName || !email || !password) {
+        throw new ValidationError("name/fullName, email and password required");
       }
       const existing = await User.findOne({ email });
       if (existing) {
         throw new ValidationError("Email already in use");
       }
       const hashed = await bcrypt.hash(password, 10);
-      const admin = await User.create({ fullName, email, password: hashed, phone, role: "admin" });
+      const admin = await User.create({ fullName: effectiveName, email, password: hashed, phone, role: "admin" });
       return res.status(201).json({ id: admin._id, status: "admin created" });
     } catch (err) {
       return next(err);
