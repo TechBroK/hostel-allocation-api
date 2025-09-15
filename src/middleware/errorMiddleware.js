@@ -1,5 +1,5 @@
 import AppError from "../errors/AppError.js";
-import logger from "../utils/logger.js";
+import { logError } from "../utils/logger.js";
 
 export function notFound(req, res, next) {
   const err = new AppError(`Not Found - ${req.originalUrl}`, { statusCode: 404, code: "ROUTE_NOT_FOUND" });
@@ -18,7 +18,7 @@ export function errorHandler(err, req, res, next) { // eslint-disable-line no-un
   }
 
   // Log structured error
-  logger.error("Request error", {
+  logError("request.error", {
     method: req.method,
     url: req.originalUrl,
     status,

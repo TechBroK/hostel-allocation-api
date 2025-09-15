@@ -15,9 +15,7 @@ import complaintRoutes from "./routes/complaintRoutes.js";
 import connectDB from "./config/db.js";
 import swaggerSpec from "./config/swagger.js";
 import { notFound, errorHandler } from "./middleware/errorMiddleware.js";
-import loggerModule from "./utils/logger.js";
-
-const { logInfo } = loggerModule;
+import { logInfo } from "./utils/logger.js";
 
 dotenv.config();
 const app = express();

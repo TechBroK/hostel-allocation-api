@@ -1,9 +1,7 @@
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 
-import loggerModule from "../utils/logger.js";
-
-const { logInfo, logError } = loggerModule;
+import { logInfo, logError } from "../utils/logger.js";
 
 dotenv.config();
 const connectDB = async () => {

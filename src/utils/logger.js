@@ -18,4 +18,11 @@ export function logError(event, data = {}) {
   logger.error({ event, ...data });
 }
 
-export default { logInfo, logError, logger };
+// Backward compatible default export: provide info/error methods so legacy imports using logger.info still work.
+export default {
+  logInfo,
+  logError,
+  logger,
+  info: (...args) => logger.info(...args),
+  error: (...args) => logger.error(...args)
+};
