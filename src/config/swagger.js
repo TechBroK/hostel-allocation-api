@@ -27,12 +27,14 @@ const swaggerDefinition = {
         required: ['fullName', 'email', 'password'],
         properties: {
           _id: { type: 'string' },
-            fullName: { type: 'string', minLength: 2 },
-            matricNumber: { type: 'string' },
-            email: { type: 'string', format: 'email' },
-            phone: { type: 'string' },
-            role: { type: 'string', enum: ['student', 'admin', 'super-admin'] },
-            level: { type: 'string' }
+          fullName: { type: 'string', minLength: 2 },
+          matricNumber: { type: 'string' },
+          email: { type: 'string', format: 'email' },
+          phone: { type: 'string', pattern: '^\\+234\\d{10}$', description: 'Nigerian MSISDN (+234 followed by 10 digits)' },
+          role: { type: 'string', enum: ['student', 'admin', 'super-admin'] },
+          gender: { type: 'string', enum: ['male','female'] },
+          level: { type: 'string', enum: ['100','200','300','400','500'], description: 'Student academic level (optional on create)' },
+          department: { type: 'string', description: 'LASU department (subset)', enum: ['Computer Science','Mass Communication','Business Administration','Accounting','Biochemistry','Microbiology','Economics','Political Science','Physics','Chemistry','Mathematics','Law','Medicine','Philosophy','History'] }
         }
       },
       Hostel: {

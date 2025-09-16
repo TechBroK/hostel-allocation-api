@@ -47,15 +47,18 @@ export function generateStudent({ gender }) {
   const cluster = faker.number.int({ min:0, max:2 });
   const fullName = faker.person.fullName();
   const traits = generateTraits(cluster);
+  const departments = ['Computer Science','Mass Communication','Business Administration','Accounting','Biochemistry','Microbiology','Economics','Political Science','Physics','Chemistry','Mathematics','Law','Medicine','Philosophy','History'];
   return {
     fullName,
     email: faker.internet.email({ firstName: fullName.split(' ')[0] }).toLowerCase(),
     password: '$2b$10$hashplaceholderhashhashhashzzzzzzzzzz', // pre-hashed or will be overwritten; optionally integrate hashing
     role: 'student',
     matricNumber: `MAT${faker.number.int({min:100000,max:999999})}`,
-    phone: faker.phone.number('+23480########'),
+  // Nigerian GSM numbers commonly start with 080 / 081 / 090 etc. Build deterministic +234 format
+  phone: `+234${faker.number.int({ min: 7000000000, max: 9099999999 })}`,
     gender: gender || faker.helpers.arrayElement(['male','female']),
-    level: faker.helpers.arrayElement(['100','200','300','400']),
+    level: faker.helpers.arrayElement(['100','200','300','400','500']),
+    department: faker.helpers.arrayElement(departments),
     personalityTraits: traits
   };
 }

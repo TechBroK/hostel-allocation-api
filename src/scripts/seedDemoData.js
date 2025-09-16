@@ -9,6 +9,7 @@ import Hostel from '../models/Hostel.js';
 import Room from '../models/Room.js';
 import Allocation from '../models/Allocation.js';
 import Complaint from '../models/Complaint.js';
+import ApprovedPairing from '../models/ApprovedPairing.js';
 import { generateStudent, generateHostel, generateRoom, generateComplaint, hashWarning } from './generators.js';
 import { computeCompatibility } from '../services/allocationAlgorithm.js';
 
@@ -40,22 +41,22 @@ function parseArgs() {
   return opts;
 }
 
-// async function wipeCollections() {
-//   await Promise.all([
-//     User.deleteMany({ role: 'student' }),
-//     Hostel.deleteMany({}),
-//     Room.deleteMany({}),
-//     Allocation.deleteMany({}),
-//     Complaint.deleteMany({}),
-//     ApprovedPairing.deleteMany({})
-//   ]);
-//   console.log('[seed] Collections cleared');
-// }
+async function wipeCollections() {
+  await Promise.all([
+    User.deleteMany({ role: 'student' }),
+    Hostel.deleteMany({}),
+    Room.deleteMany({}),
+    Allocation.deleteMany({}),
+    Complaint.deleteMany({}),
+    ApprovedPairing.deleteMany({})
+  ]);
+  console.log('[seed] Collections cleared');
+}
 
 async function seed() {
   const opts = parseArgs();
   await connect();
-  // if (opts.fresh) { await wipeCollections(); }
+  if (opts.fresh) { await wipeCollections(); }
 
   // Ensure at least one admin remains if clearing only students? (We leave existing non-student users.)
   console.log('[seed] Generating hostels');
@@ -80,6 +81,9 @@ async function seed() {
   const studentObjs = [];
   for (let s = 0; s < opts.students; s += 1) {
     studentObjs.push(generateStudent({}));
+  }
+  if (studentObjs.length) {
+    console.log('[seed][debug] sample student', JSON.stringify(studentObjs[0], null, 2));
   }
   // Hash a single password value for all seeded students for convenience
   const plain = 'DemoUser123!';
