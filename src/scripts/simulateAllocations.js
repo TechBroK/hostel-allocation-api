@@ -3,10 +3,14 @@
 // Usage examples:
 //  Submit only:
 //    node src/scripts/simulateAllocations.js baseUrl=http://localhost:8080 count=50 concurrency=10 authFile=./studentTokens.txt
-//  Reallocate only (admin tokens required; implementation added in later steps):
+//  Reallocate only (admin tokens required):
 //    node src/scripts/simulateAllocations.js mode=reallocate adminAuthFile=./adminTokens.txt
 //  Mixed mode (some submissions, some reallocations):
 //    node src/scripts/simulateAllocations.js mode=mixed reallocateRatio=0.25 authFile=./studentTokens.txt adminAuthFile=./adminTokens.txt
+//  Dry run (no network calls) with generated placeholder tokens:
+//    node src/scripts/simulateAllocations.js mode=mixed dryRun=true autoTokens=40 adminAutoTokens=5
+//  Reallocate dry run without real JWTs:
+//    node src/scripts/simulateAllocations.js mode=reallocate dryRun=true adminAutoTokens=10
 // Tokens files should contain one JWT per line.
 
 import axios from 'axios';
@@ -25,13 +29,22 @@ function parseArgs() {
     session: new Date().getFullYear().toString(),
     timeoutMs: 8000,
     mode: 'submit', // submit | reallocate | mixed
-    reallocateRatio: 0.3 // when mode=mixed, probability a given attempt is reallocate
+    reallocateRatio: 0.3, // when mode=mixed, probability a given attempt is reallocate
+    dryRun: false,        // if true, no network calls are made; outcomes simulated
+  autoTokens: 0,        // generate N placeholder tokens when authFile missing (still 401 unless dryRun)
+  adminAutoTokens: 0    // generate N placeholder admin tokens when adminAuthFile missing (use with dryRun)
   };
   args.forEach(a => {
     const [k, v] = a.split('=');
     if (v && Object.prototype.hasOwnProperty.call(opts, k)) {
       const num = Number(v);
-      opts[k] = Number.isNaN(num) ? v : num;
+      if (v === 'true') {
+        opts[k] = true;
+      } else if (v === 'false') {
+        opts[k] = false;
+      } else {
+        opts[k] = Number.isNaN(num) ? v : num;
+      }
     }
   });
   // Basic validation
@@ -45,7 +58,7 @@ function parseArgs() {
     process.exit(1);
   }
   if (opts.mode !== 'submit' && !opts.adminAuthFile) {
-    console.warn('[simulate] WARNING: mode requires adminAuthFile (will be needed for reallocation requests).');
+    console.warn('[simulate] WARNING: mode requires adminAuthFile (or adminAutoTokens>0 with dryRun).');
   }
   return opts;
 }
@@ -80,18 +93,18 @@ async function reallocateAllocation(baseUrl, adminToken, pickCache, timeoutMs) {
   try {
     if (!pickCache.allocations || pickCache.allocations.length === 0 || Date.now() - (pickCache.allocationsLoadedAt || 0) > 15000) {
       // Fetch all allocations (admin endpoint) page size crude (assumes API returns list without paging or with default reasonable size)
-      const allocRes = await axios.get(`${baseUrl}/api/allocations`, { headers: { Authorization: `Bearer ${adminToken}` } });
+  const allocRes = await axios.get(`${baseUrl}/api/admin/allocations`, { headers: { Authorization: `Bearer ${adminToken}` } });
       pickCache.allocations = (allocRes.data?.data || allocRes.data?.items || allocRes.data || []).filter(a => a.status === 'approved');
       pickCache.allocationsLoadedAt = Date.now();
     }
     if (!pickCache.rooms || pickCache.rooms.length === 0 || Date.now() - (pickCache.roomsLoadedAt || 0) > 30000) {
       // Fetch hostels then their rooms (not ideal but acceptable for simulation). We infer /api/hostels and /api/rooms/hostel/:hostelId endpoints.
-      const hostelsRes = await axios.get(`${baseUrl}/api/hostels`);
+  const hostelsRes = await axios.get(`${baseUrl}/api/admin/hostels`, { headers: { Authorization: `Bearer ${adminToken}` } });
       const hostels = hostelsRes.data?.data || hostelsRes.data || [];
       const rooms = [];
       for (const h of hostels) {
         try {
-          const rRes = await axios.get(`${baseUrl}/api/rooms/hostel/${h._id}`);
+          const rRes = await axios.get(`${baseUrl}/api/admin/hostels/${h._id}/rooms`, { headers: { Authorization: `Bearer ${adminToken}` } });
           const arr = rRes.data?.data || rRes.data || [];
           for (const r of arr) { rooms.push(r); }
         } catch { /* ignore */ }
@@ -127,16 +140,26 @@ async function run() {
   const opts = parseArgs();
   const tokens = opts.authFile ? loadTokens(opts.authFile) : [];
   if (opts.mode !== 'reallocate' && tokens.length === 0) {
-    console.error('[simulate] No student tokens loaded (authFile required for submit or mixed modes)');
-    process.exit(1);
+    if (opts.autoTokens > 0) {
+      for (let i = 0; i < opts.autoTokens; i += 1) { tokens.push(`FAKE_TOKEN_${i+1}`); }
+      console.warn(`[simulate] No authFile provided. Generated ${opts.autoTokens} placeholder tokens. Use dryRun=true to avoid 401 spam.`);
+    } else if (opts.dryRun) {
+      console.warn('[simulate] Dry run with zero tokens; submissions simulated only.');
+    } else {
+      console.error('[simulate] No student tokens loaded (provide authFile=... or set dryRun=true or autoTokens>0)');
+      process.exit(1);
+    }
   }
   if (tokens.length) {
     console.log(`[simulate] Loaded student tokens=${tokens.length}`);
   }
-  // Placeholder: admin tokens will be loaded when reallocation logic is implemented.
   if (opts.mode !== 'submit') {
     if (!opts.adminAuthFile) {
-      console.warn('[simulate] No adminAuthFile provided yet; reallocation attempts (when implemented) would fail.');
+      if (opts.adminAutoTokens > 0) {
+        console.warn(`[simulate] No adminAuthFile provided. Will generate ${opts.adminAutoTokens} placeholder admin tokens${opts.dryRun ? '' : ' (requests will 401)'} .`);
+      } else if (!opts.dryRun) {
+        console.warn('[simulate] No adminAuthFile provided; real reallocation requests will likely fail authorization.');
+      }
     }
   }
   const start = Date.now();
@@ -151,6 +174,9 @@ async function run() {
   const results = [];
   const pickCache = {};
   const adminTokens = (opts.adminAuthFile ? loadTokens(opts.adminAuthFile) : []);
+  if (!adminTokens.length && opts.adminAutoTokens > 0) {
+    for (let i = 0; i < opts.adminAutoTokens; i += 1) { adminTokens.push(`FAKE_ADMIN_TOKEN_${i+1}`); }
+  }
   if (opts.mode !== 'submit' && adminTokens.length === 0) {
     console.warn('[simulate] No admin tokens loaded; reallocation attempts will fail authorization');
   }
@@ -163,31 +189,52 @@ async function run() {
       if (opts.mode === 'reallocate') { op = 'reallocate'; }
       else if (opts.mode === 'mixed') { op = Math.random() < opts.reallocateRatio ? 'reallocate' : 'submit'; }
       if (op === 'submit') {
-        const token = tokens[Math.floor(Math.random() * tokens.length)];
-        const r = await submitAllocation(opts.baseUrl, token, opts.session, opts.timeoutMs);
-        if (r.ok) {
-          successes += 1;
-          results.push({ t: Date.now(), op, status: r.status });
+        if (opts.dryRun) {
+          const simDelay = 25 + Math.random()*75; await new Promise(r => setTimeout(r, simDelay));
+          const roll = Math.random();
+          if (roll < 0.75) { successes += 1; results.push({ t: Date.now(), op, status: 201, dry: true }); }
+          else if (roll < 0.85) { already += 1; results.push({ t: Date.now(), op, status: 409, error: 'duplicate (simulated)', dry: true }); }
+          else { failures += 1; results.push({ t: Date.now(), op, status: 400, error: 'validation (simulated)', dry: true }); }
         } else {
-          const msg = (r.error?.message || JSON.stringify(r.error) || '').toLowerCase();
-          if (msg.includes('pending/approved')) { already += 1; }
-          else { failures += 1; }
-          results.push({ t: Date.now(), op, status: r.status || 0, error: msg.slice(0,120) });
+          const token = tokens[Math.floor(Math.random() * tokens.length)];
+          const r = await submitAllocation(opts.baseUrl, token, opts.session, opts.timeoutMs);
+          if (r.ok) {
+            successes += 1;
+            results.push({ t: Date.now(), op, status: r.status });
+          } else {
+            const msg = (r.error?.message || JSON.stringify(r.error) || '').toLowerCase();
+            if (msg.includes('pending/approved')) { already += 1; }
+            else { failures += 1; }
+            results.push({ t: Date.now(), op, status: r.status || 0, error: msg.slice(0,120) });
+          }
         }
       } else {
-        const adminToken = adminTokens[Math.floor(Math.random() * (adminTokens.length || 1))];
-        const r = await reallocateAllocation(opts.baseUrl, adminToken, pickCache, opts.timeoutMs);
-        if (r.ok) {
-          reallocSuccess += 1;
-          results.push({ t: Date.now(), op, status: r.status });
+        if (opts.dryRun) {
+          const simDelay = 40 + Math.random()*110; await new Promise(r => setTimeout(r, simDelay));
+          const roll = Math.random();
+          if (roll < 0.6) { reallocSuccess += 1; results.push({ t: Date.now(), op, status: 200, dry: true }); }
+          else {
+            reallocFail += 1;
+            const bucket = Math.random();
+            if (bucket < 0.33) { reallocCompatibility += 1; results.push({ t: Date.now(), op, status: 422, error: 'compatibility (simulated)', dry: true }); }
+            else if (bucket < 0.66) { reallocCapacity += 1; results.push({ t: Date.now(), op, status: 409, error: 'room full (simulated)', dry: true }); }
+            else { reallocOther += 1; results.push({ t: Date.now(), op, status: 400, error: 'other (simulated)', dry: true }); }
+          }
         } else {
-          const raw = r.error?.message || r.error || '';
-            const msg = (typeof raw === 'string' ? raw : JSON.stringify(raw)).toLowerCase();
-          reallocFail += 1;
-          if (msg.includes('compatibility')) { reallocCompatibility += 1; }
-          else if (msg.includes('full')) { reallocCapacity += 1; }
-          else { reallocOther += 1; }
-          results.push({ t: Date.now(), op, status: r.status || 0, error: msg.slice(0,120) });
+          const adminToken = adminTokens[Math.floor(Math.random() * (adminTokens.length || 1))];
+          const r = await reallocateAllocation(opts.baseUrl, adminToken, pickCache, opts.timeoutMs);
+          if (r.ok) {
+            reallocSuccess += 1;
+            results.push({ t: Date.now(), op, status: r.status });
+          } else {
+            const raw = r.error?.message || r.error || '';
+              const msg = (typeof raw === 'string' ? raw : JSON.stringify(raw)).toLowerCase();
+            reallocFail += 1;
+            if (msg.includes('compatibility')) { reallocCompatibility += 1; }
+            else if (msg.includes('full')) { reallocCapacity += 1; }
+            else { reallocOther += 1; }
+            results.push({ t: Date.now(), op, status: r.status || 0, error: msg.slice(0,120) });
+          }
         }
       }
     }
@@ -207,9 +254,13 @@ async function run() {
     durationMs: duration,
     mode: opts.mode,
     attempted: opts.count,
+    dryRun: opts.dryRun,
     submit: { successes, failures, duplicates: already },
     reallocate: { success: reallocSuccess, failed: reallocFail, compatibility: reallocCompatibility, capacity: reallocCapacity, other: reallocOther }
   }, null, 2));
+  if (opts.dryRun) {
+    console.log('[simulate] Dry run complete (no network calls performed).');
+  }
 }
 
 run().catch(e => { console.error('[simulate] ERROR', e); process.exit(1); });

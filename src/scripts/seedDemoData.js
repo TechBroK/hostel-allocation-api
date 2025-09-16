@@ -9,7 +9,6 @@ import Hostel from '../models/Hostel.js';
 import Room from '../models/Room.js';
 import Allocation from '../models/Allocation.js';
 import Complaint from '../models/Complaint.js';
-import ApprovedPairing from '../models/ApprovedPairing.js';
 import { generateStudent, generateHostel, generateRoom, generateComplaint, hashWarning } from './generators.js';
 import { computeCompatibility } from '../services/allocationAlgorithm.js';
 
