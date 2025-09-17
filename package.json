@@ -4,7 +4,8 @@
   "main": "src/app.js",
   "scripts": {
     "start": "node src/app.js",
-  "test": "NODE_ENV=test NODE_OPTIONS=--experimental-vm-modules jest --runInBand",
+  "test": "NODE_ENV=test NODE_OPTIONS=--experimental-vm-modules jest --config=jest.config.mjs --runInBand",
+  "test:ci": "NODE_ENV=test NODE_OPTIONS=--experimental-vm-modules jest --config=jest.config.mjs --runInBand --coverage",
     "create-super-admin": "node src/createSuperAdmin.js",
     "seed:demo": "node src/scripts/seedDemoData.js",
     "seed:demo:keep": "node src/scripts/seedDemoData.js --keep",
