@@ -34,7 +34,7 @@ const userSchema = new mongoose.Schema({
     musicPreference: String,
     visitorFrequency: String,
   },
-});
+}, { timestamps: true });
 
 // Indexes to optimize common academic filtering queries
 // Compound index helps queries filtering by both department & level
@@ -42,6 +42,8 @@ userSchema.index({ department: 1, level: 1 });
 // Individual indexes assist when filtering by only one of the fields
 userSchema.index({ department: 1 });
 userSchema.index({ level: 1 });
+// Recency queries (e.g., latest updated users)
+userSchema.index({ updatedAt: -1 });
 
 // Normalize phone before save: accept common Nigerian local formats (0XXXXXXXXXX or 234XXXXXXXXXX)
 userSchema.pre('save', function(next) {

@@ -77,7 +77,7 @@ async function main() {
     if (Object.keys(update).length) {
       modified++;
       if (!opts.dryRun) {
-        updates.push({ updateOne: { filter: { _id: doc._id }, update: { $set: update } } });
+        updates.push({ updateOne: { filter: { _id: doc._id }, update: { $set: { ...update, updatedAt: new Date() } } } });
       } else if (batch.length < 5) {
         batch.push({ _id: doc._id.toString(), ...update });
       }
