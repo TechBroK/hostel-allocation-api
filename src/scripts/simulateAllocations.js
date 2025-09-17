@@ -32,7 +32,9 @@ function parseArgs() {
     reallocateRatio: 0.3, // when mode=mixed, probability a given attempt is reallocate
     dryRun: false,        // if true, no network calls are made; outcomes simulated
   autoTokens: 0,        // generate N placeholder tokens when authFile missing (still 401 unless dryRun)
-  adminAutoTokens: 0    // generate N placeholder admin tokens when adminAuthFile missing (use with dryRun)
+  adminAutoTokens: 0,    // generate N placeholder admin tokens when adminAuthFile missing (use with dryRun)
+  errorDetail: false,    // if true, include full error bodies in per-attempt log output
+  errorLogFile: null     // if set, append JSON lines of failed attempts with full detail
   };
   args.forEach(a => {
     const [k, v] = a.split('=');
@@ -172,6 +174,7 @@ async function run() {
   let reallocCapacity = 0;      // classification of room full
   let reallocOther = 0;
   const results = [];
+  const errorLines = [];
   const pickCache = {};
   const adminTokens = (opts.adminAuthFile ? loadTokens(opts.adminAuthFile) : []);
   if (!adminTokens.length && opts.adminAutoTokens > 0) {
@@ -202,10 +205,15 @@ async function run() {
             successes += 1;
             results.push({ t: Date.now(), op, status: r.status });
           } else {
-            const msg = (r.error?.message || JSON.stringify(r.error) || '').toLowerCase();
-            if (msg.includes('pending/approved')) { already += 1; }
+            const rawObj = r.error;
+            const rawStr = (r.error?.message || JSON.stringify(r.error) || '');
+            const msg = rawStr.toLowerCase();
+            if (msg.includes('already exists') || msg.includes('allocation for this student')) { already += 1; }
             else { failures += 1; }
-            results.push({ t: Date.now(), op, status: r.status || 0, error: msg.slice(0,120) });
+            const rec = { t: Date.now(), op, status: r.status || 0, error: msg.slice(0,200) };
+            if (opts.errorDetail) { rec.raw = rawObj; }
+            results.push(rec);
+            if (opts.errorLogFile) { errorLines.push({ phase: 'submit', detail: rawObj, status: r.status || 0 }); }
           }
         }
       } else {
@@ -228,12 +236,16 @@ async function run() {
             results.push({ t: Date.now(), op, status: r.status });
           } else {
             const raw = r.error?.message || r.error || '';
-              const msg = (typeof raw === 'string' ? raw : JSON.stringify(raw)).toLowerCase();
+            const msg = (typeof raw === 'string' ? raw : JSON.stringify(raw)).toLowerCase();
             reallocFail += 1;
             if (msg.includes('compatibility')) { reallocCompatibility += 1; }
             else if (msg.includes('full')) { reallocCapacity += 1; }
+            else if (msg.includes('gender-hostel')) { reallocOther += 1; }
             else { reallocOther += 1; }
-            results.push({ t: Date.now(), op, status: r.status || 0, error: msg.slice(0,120) });
+            const rec = { t: Date.now(), op, status: r.status || 0, error: msg.slice(0,200) };
+            if (opts.errorDetail) { rec.raw = r.error; }
+            results.push(rec);
+            if (opts.errorLogFile) { errorLines.push({ phase: 'reallocate', detail: r.error, status: r.status || 0 }); }
           }
         }
       }
@@ -258,6 +270,16 @@ async function run() {
     submit: { successes, failures, duplicates: already },
     reallocate: { success: reallocSuccess, failed: reallocFail, compatibility: reallocCompatibility, capacity: reallocCapacity, other: reallocOther }
   }, null, 2));
+  if (opts.errorLogFile && errorLines.length) {
+    try {
+      const p = path.resolve(opts.errorLogFile);
+      const blob = errorLines.map(l => JSON.stringify(l)).join('\n') + '\n';
+      fs.appendFileSync(p, blob, 'utf8');
+      console.log(`[simulate] Wrote detailed errors to ${p}`);
+    } catch (e) {
+      console.warn('[simulate] Failed writing error log file', e.message);
+    }
+  }
   if (opts.dryRun) {
     console.log('[simulate] Dry run complete (no network calls performed).');
   }

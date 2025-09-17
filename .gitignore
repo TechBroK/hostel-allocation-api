@@ -60,3 +60,8 @@ Thumbs.db
 
 # Uploads (if not needed in repo)
 uploads/
+
+# Simulation / exported auth token artifacts (should not be committed)
+adminTokens.txt
+studentTokens.txt
+simErrors.log

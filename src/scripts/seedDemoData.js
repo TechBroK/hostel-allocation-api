@@ -41,24 +41,10 @@ function parseArgs() {
   return opts;
 }
 
-async function wipeCollections() {
-  await Promise.all([
-    User.deleteMany({ role: 'student' }),
-    Hostel.deleteMany({}),
-    Room.deleteMany({}),
-    Allocation.deleteMany({}),
-    Complaint.deleteMany({}),
-    ApprovedPairing.deleteMany({})
-  ]);
-  console.log('[seed] Collections cleared');
-}
-
 async function seed() {
   const opts = parseArgs();
   await connect();
-  if (opts.fresh) { await wipeCollections(); }
 
-  // Ensure at least one admin remains if clearing only students? (We leave existing non-student users.)
   console.log('[seed] Generating hostels');
   const hostelDocs = [];
   for (const gender of ['male','female']) {

@@ -11,7 +11,9 @@
     "seed:clear": "node src/scripts/clearData.js",
     "simulate:allocations": "node src/scripts/simulateAllocations.js",
     "lint": "eslint \"src/**/*.js\"",
-    "lint:fix": "eslint \"src/**/*.js\" --fix"
+    "lint:fix": "eslint \"src/**/*.js\" --fix",
+    "db:sync-indexes": "node src/scripts/syncIndexes.js",
+    "tokens:export": "node src/scripts/exportTokens.js"
   },
   "keywords": [],
   "author": "",
