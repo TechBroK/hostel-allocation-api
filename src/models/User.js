@@ -45,6 +45,9 @@ userSchema.index({ department: 1 });
 userSchema.index({ level: 1 });
 // Recency queries (e.g., latest updated users)
 userSchema.index({ updatedAt: -1 });
+// Activity / listing optimizations
+userSchema.index({ role: 1, createdAt: -1 });
+userSchema.index({ role: 1, updatedAt: -1 });
 
 // Normalize phone before save: accept common Nigerian local formats (0XXXXXXXXXX or 234XXXXXXXXXX)
 userSchema.pre('save', function(next) {

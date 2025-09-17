@@ -3,7 +3,7 @@ import express from "express";
 
 import { protect } from "../middleware/authMiddleware.js";
 import { permit } from "../middleware/roleMiddleware.js";
-import { listStudents, listRecentStudents, updateStudentStatus, getSummary, exportReport, createAdminUser } from "../controllers/adminController.js";
+import { listStudents, listUnallocatedStudents, listRecentStudents, updateStudentStatus, getSummary, exportReport, createAdminUser } from "../controllers/adminController.js";
 import { createHostel, listHostels } from "../controllers/hostelController.js";
 import { createRoom, listRoomsByHostel } from "../controllers/roomController.js";
 import { adminCreateAllocation, listAllocations } from "../controllers/allocationController.js";
@@ -85,6 +85,46 @@ router.post("/admins", protect, permit("super-admin", "admin"), validate(createA
  */
 // students
 router.get("/students", protect, permit("admin"), listStudents);
+/**
+ * @swagger
+ * /api/admin/students/unallocated:
+ *   get:
+ *     summary: List students without an approved allocation
+ *     description: Returns students who either have no allocation document or whose latest allocation is not approved. Optional session filter.
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, minimum: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 1, maximum: 100 }
+ *       - in: query
+ *         name: session
+ *         schema: { type: string }
+ *         description: Filter by academic session label
+ *     responses:
+ *       200:
+ *         description: Paged unallocated students list
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     allOf:
+ *                       - $ref: '#/components/schemas/StudentListItem'
+ *                       - type: object
+ *                         properties:
+ *                           allocationStatus: { type: string, description: "none | pending | rejected" }
+ *                 meta: { $ref: '#/components/schemas/PagedMeta' }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ */
+router.get("/students/unallocated", protect, permit("admin"), listUnallocatedStudents);
 /**
  * @swagger
  * /api/admin/students/recent:

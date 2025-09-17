@@ -1,9 +1,13 @@
 // src/controllers/adminController.js
 
-import { listStudentsService, listRecentStudentsService, createAdminUserService, updateStudentStatusService, getSummaryService, exportReportService } from '../services/controllers/adminService.js';
+import { listStudentsService, listUnallocatedStudentsService, listRecentStudentsService, createAdminUserService, updateStudentStatusService, getSummaryService, exportReportService } from '../services/controllers/adminService.js';
 
 export const listStudents = async (req, res, next) => {
   try { return res.json(listStudentsService(req.query)); } catch (err) { return next(err); }
+};
+
+export const listUnallocatedStudents = async (req, res, next) => {
+  try { return res.json(await listUnallocatedStudentsService(req.query)); } catch (err) { return next(err); }
 };
 
 export const listRecentStudents = async (req, res, next) => {

@@ -9,15 +9,59 @@ import { getDepartments } from '../../utils/departmentCache.js';
 
 export async function listStudentsService(query) {
   const { page, limit, skip } = getPaginationParams(query);
-  const [students, total] = await Promise.all([
-    User.find({ role: 'student' }).select('fullName matricNumber level email createdAt updatedAt').skip(skip).limit(limit),
-    User.countDocuments({ role: 'student' })
-  ]);
-  const studentsWithStatus = await Promise.all(students.map(async (s) => {
-    const allocation = await Allocation.findOne({ student: s._id }).sort({ allocatedAt: -1 }).lean();
-    return { id: s._id, fullName: s.fullName, matricNumber: s.matricNumber, level: s.level, status: allocation ? allocation.status : 'pending', createdAt: s.createdAt, updatedAt: s.updatedAt };
-  }));
-  return buildPagedResponse({ items: studentsWithStatus, total, page, limit });
+  // Aggregation to fetch students with latest allocation status in one pass
+  const match = { role: 'student' };
+  const pipeline = [
+    { $match: match },
+    { $sort: { createdAt: -1, _id: 1 } },
+    { $facet: {
+      data: [
+        { $skip: skip },
+        { $limit: limit },
+        { $lookup: { from: 'allocations', let: { studentId: '$_id' }, pipeline: [ { $match: { $expr: { $eq: ['$student','$$studentId'] } } }, { $sort: { allocatedAt: -1, _id: -1 } }, { $limit: 1 }, { $project: { status: 1 } } ], as: 'latestAllocation' } },
+        { $addFields: { status: { $ifNull: [ { $arrayElemAt: ['$latestAllocation.status',0] }, 'pending' ] } } },
+        { $project: { _id:1, fullName:1, matricNumber:1, level:1, email:1, status:1, createdAt:1, updatedAt:1 } }
+      ],
+      meta: [ { $count: 'total' } ]
+    } }
+  ];
+  const agg = await User.aggregate(pipeline);
+  const items = agg[0]?.data || [];
+  const total = agg[0]?.meta?.[0]?.total || 0;
+  const mapped = items.map(i => ({ id: i._id, fullName: i.fullName, matricNumber: i.matricNumber, level: i.level, email: i.email, status: i.status, createdAt: i.createdAt, updatedAt: i.updatedAt }));
+  return buildPagedResponse({ items: mapped, total, page, limit });
+}
+
+// List students without an approved allocation. Optionally include those with 'pending' only (default) or strictly no allocation document.
+export async function listUnallocatedStudentsService(query) {
+  const { page, limit, skip } = getPaginationParams(query);
+  const session = query.session; // optional filter by academic session label
+  const match = { role: 'student' };
+  const allocPipeline = [
+    { $match: match },
+    { $sort: { createdAt: -1, _id: 1 } },
+    { $facet: {
+      data: [
+        { $lookup: { from: 'allocations', let: { sid: '$_id' }, pipeline: [ { $match: { $expr: { $eq: ['$student','$$sid'] }, ...(session ? { session } : {}) } }, { $sort: { allocatedAt: -1, _id: -1 } }, { $limit: 1 }, { $project: { status:1 } } ], as: 'alloc' } },
+        { $addFields: { allocationStatus: { $ifNull: [ { $arrayElemAt: ['$alloc.status',0] }, 'none' ] } } },
+        { $match: { allocationStatus: { $in: ['none','pending','rejected'] } } },
+        { $skip: skip },
+        { $limit: limit },
+        { $project: { _id:1, fullName:1, matricNumber:1, level:1, email:1, allocationStatus:1, createdAt:1, updatedAt:1 } }
+      ],
+      meta: [
+        { $lookup: { from: 'allocations', let: { sid: '$_id' }, pipeline: [ { $match: { $expr: { $eq: ['$student','$$sid'] }, ...(session ? { session } : {}) } }, { $sort: { allocatedAt: -1, _id: -1 } }, { $limit: 1 }, { $project: { status:1 } } ], as: 'alloc' } },
+        { $addFields: { allocationStatus: { $ifNull: [ { $arrayElemAt: ['$alloc.status',0] }, 'none' ] } } },
+        { $match: { allocationStatus: { $in: ['none','pending','rejected'] } } },
+        { $count: 'total' }
+      ]
+    } }
+  ];
+  const agg = await User.aggregate(allocPipeline);
+  const items = agg[0]?.data || [];
+  const total = agg[0]?.meta?.[0]?.total || 0;
+  const mapped = items.map(i => ({ id: i._id, fullName: i.fullName, matricNumber: i.matricNumber, level: i.level, email: i.email, allocationStatus: i.allocationStatus, createdAt: i.createdAt, updatedAt: i.updatedAt }));
+  return buildPagedResponse({ items: mapped, total, page, limit });
 }
 
 export async function createAdminUserService(data) {
@@ -36,12 +80,28 @@ export async function createAdminUserService(data) {
 export async function listRecentStudentsService({ hours = 24, limit = 50 }) {
   const h = Number(hours) || 24;
   const lim = Math.min(Number(limit) || 50, 200);
-  const recent = await User.recentlyUpdated(h, { role: 'student' }).limit(lim).select('fullName email matricNumber level createdAt updatedAt');
-  const withStatus = await Promise.all(recent.map(async (s) => {
-    const allocation = await Allocation.findOne({ student: s._id }).sort({ allocatedAt: -1 }).lean();
-    return { id: s._id, fullName: s.fullName, email: s.email, matricNumber: s.matricNumber, level: s.level, allocationStatus: allocation?.status || 'pending', createdAt: s.createdAt, updatedAt: s.updatedAt };
-  }));
-  return { hours: h, count: withStatus.length, data: withStatus };
+  const since = new Date(Date.now() - h*60*60*1000);
+  const pipeline = [
+    { $match: { role: 'student', updatedAt: { $gte: since } } },
+    { $sort: { updatedAt: -1, _id: -1 } },
+    { $limit: lim },
+    { $lookup: {
+      from: 'allocations',
+      let: { sid: '$_id' },
+      pipeline: [
+        { $match: { $expr: { $eq: ['$student', '$$sid'] } } },
+        { $sort: { allocatedAt: -1, _id: -1 } },
+        { $limit: 1 },
+        { $project: { status: 1 } }
+      ],
+      as: 'alloc'
+    } },
+    { $addFields: { allocationStatus: { $ifNull: [ { $arrayElemAt: ['$alloc.status', 0] }, 'pending' ] } } },
+    { $project: { _id: 1, fullName: 1, email: 1, matricNumber: 1, level: 1, allocationStatus: 1, createdAt: 1, updatedAt: 1 } }
+  ];
+  const data = await User.aggregate(pipeline);
+  const mapped = data.map(d => ({ id: d._id, fullName: d.fullName, email: d.email, matricNumber: d.matricNumber, level: d.level, allocationStatus: d.allocationStatus, createdAt: d.createdAt, updatedAt: d.updatedAt }));
+  return { hours: h, count: mapped.length, data: mapped };
 }
 
 export async function updateStudentStatusService(studentId, status) {
@@ -53,38 +113,68 @@ export async function updateStudentStatusService(studentId, status) {
 }
 
 export async function getSummaryService() {
-  const totalStudents = await User.countDocuments({ role: 'student' });
-  const recentlyActiveStudents24h = await User.countDocuments({ role: 'student', updatedAt: { $gte: new Date(Date.now() - 24*60*60*1000) } });
-  const totalRooms = await Room.countDocuments();
-  const rooms = await Room.find().select('capacity occupied').lean();
-  const occupiedRooms = rooms.reduce((s, r) => s + (r.occupied || 0), 0);
-  const totalCapacity = rooms.reduce((s, r) => s + (r.capacity || 0), 0);
-  const departments = await getDepartments();
-  return { totalStudents, recentlyActiveStudents24h, totalRooms, occupiedRooms, availableRooms: Math.max(0, totalCapacity - occupiedRooms), departmentCount: departments.length };
+  const since24 = new Date(Date.now() - 24*60*60*1000);
+  const [studentAgg, roomAgg, departments] = await Promise.all([
+    User.aggregate([
+      { $match: { role: 'student' } },
+      { $group: { _id: null, total: { $sum: 1 }, active: { $sum: { $cond: [ { $gte: ['$updatedAt', since24] }, 1, 0 ] } } } }
+    ]),
+    Room.aggregate([
+      { $group: { _id: null, totalRooms: { $sum: 1 }, occupiedBeds: { $sum: { $ifNull: ['$occupied',0] } }, totalBeds: { $sum: { $ifNull: ['$capacity',0] } } } }
+    ]),
+    getDepartments()
+  ]);
+  const studentMeta = studentAgg[0] || { total: 0, active: 0 };
+  const roomMeta = roomAgg[0] || { totalRooms: 0, occupiedBeds: 0, totalBeds: 0 };
+  return {
+    totalStudents: studentMeta.total,
+    recentlyActiveStudents24h: studentMeta.active,
+    totalRooms: roomMeta.totalRooms,
+    occupiedRooms: roomMeta.occupiedBeds,
+    availableRooms: Math.max(0, (roomMeta.totalBeds - roomMeta.occupiedBeds)),
+    departmentCount: departments.length
+  };
 }
 
 export async function exportReportService({ type='allocations', format='csv' }) {
   if (format !== 'csv') { throw new ValidationError('Only csv export supported in this endpoint'); }
   if (type === 'students') {
-    const students = await User.find({ role: 'student' }).select('fullName matricNumber email level').lean();
+    const students = await User.aggregate([
+      { $match: { role: 'student' } },
+      { $project: { fullName:1, matricNumber:1, email:1, level:1 } }
+    ]);
     const header = 'id,fullName,matricNumber,email,level\n';
     const csv = header + students.map((s) => `${s._id},${s.fullName},${s.matricNumber},${s.email},${s.level}`).join('\n');
     return { filename: 'students.csv', csv };
   }
   if (type === 'rooms') {
-    const rooms = await Room.find().populate('hostel', 'name').lean();
+    const rooms = await Room.aggregate([
+      { $lookup: { from: 'hostels', localField: 'hostel', foreignField: '_id', as: 'hostel' } },
+      { $addFields: { hostelName: { $ifNull: [ { $arrayElemAt: ['$hostel.name',0] }, '' ] } } },
+      { $project: { roomNumber:1, type:1, capacity:1, occupied:1, hostelName:1 } }
+    ]);
     const header = 'id,hostel,roomNumber,type,capacity,occupied\n';
-    const csv = header + rooms.map((r) => `${r._id},${r.hostel?.name || ''},${r.roomNumber},${r.type},${r.capacity},${r.occupied || 0}`).join('\n');
+    const csv = header + rooms.map((r) => `${r._id},${r.hostelName},${r.roomNumber},${r.type},${r.capacity},${r.occupied || 0}`).join('\n');
     return { filename: 'rooms.csv', csv };
   }
-  const allocs = await Allocation.find().populate('student', 'fullName matricNumber').populate('room', 'roomNumber').lean();
+  const allocs = await Allocation.aggregate([
+    { $lookup: { from: 'users', localField: 'student', foreignField: '_id', as: 'studentDoc' } },
+    { $lookup: { from: 'rooms', localField: 'room', foreignField: '_id', as: 'roomDoc' } },
+    { $addFields: {
+      studentName: { $ifNull: [ { $arrayElemAt: ['$studentDoc.fullName',0] }, '' ] },
+      studentMatric: { $ifNull: [ { $arrayElemAt: ['$studentDoc.matricNumber',0] }, '' ] },
+      roomNumber: { $ifNull: [ { $arrayElemAt: ['$roomDoc.roomNumber',0] }, '' ] }
+    } },
+    { $project: { studentName:1, studentMatric:1, roomNumber:1, status:1, allocatedAt:1 } }
+  ]);
   const header = 'id,student,matricNumber,roomNumber,status,allocatedAt\n';
-  const csv = header + allocs.map((a) => `${a._id},${a.student?.fullName || ''},${a.student?.matricNumber || ''},${a.room?.roomNumber || ''},${a.status},${a.allocatedAt || ''}`).join('\n');
+  const csv = header + allocs.map((a) => `${a._id},${a.studentName},${a.studentMatric},${a.roomNumber},${a.status},${a.allocatedAt || ''}`).join('\n');
   return { filename: 'allocations.csv', csv };
 }
 
 export default {
   listStudentsService,
+  listUnallocatedStudentsService,
   listRecentStudentsService,
   createAdminUserService,
   updateStudentStatusService,

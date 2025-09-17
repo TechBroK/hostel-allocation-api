@@ -14,5 +14,8 @@ const allocationSchema = new mongoose.Schema({
 });
 
 allocationSchema.index({ student: 1, session: 1 }, { unique: true });
+// For latest allocation lookups & status filtering
+allocationSchema.index({ student: 1, allocatedAt: -1 });
+allocationSchema.index({ status: 1, allocatedAt: -1 });
 
 export default mongoose.model("Allocation", allocationSchema);
