@@ -11,6 +11,9 @@ export async function listStudentsService(query) {
   const { page, limit, skip } = getPaginationParams(query);
   // Aggregation to fetch students with latest allocation status in one pass
   const match = { role: 'student' };
+  if (query.gender) { match.gender = query.gender; }
+  if (query.department) { match.department = query.department; }
+  if (query.level) { match.level = query.level; }
   const pipeline = [
     { $match: match },
     { $sort: { createdAt: -1, _id: 1 } },
@@ -37,6 +40,9 @@ export async function listUnallocatedStudentsService(query) {
   const { page, limit, skip } = getPaginationParams(query);
   const session = query.session; // optional filter by academic session label
   const match = { role: 'student' };
+  if (query.gender) { match.gender = query.gender; }
+  if (query.department) { match.department = query.department; }
+  if (query.level) { match.level = query.level; }
   const allocPipeline = [
     { $match: match },
     { $sort: { createdAt: -1, _id: 1 } },
@@ -77,12 +83,17 @@ export async function createAdminUserService(data) {
   return { id: admin._id, status: 'admin created' };
 }
 
-export async function listRecentStudentsService({ hours = 24, limit = 50 }) {
+export async function listRecentStudentsService(params = {}) {
+  const { hours = 24, limit = 50, gender, department, level } = params;
   const h = Number(hours) || 24;
   const lim = Math.min(Number(limit) || 50, 200);
-  const since = new Date(Date.now() - h*60*60*1000);
+  const since = new Date(Date.now() - h * 60 * 60 * 1000);
+  const match = { role: 'student', updatedAt: { $gte: since } };
+  if (gender) { match.gender = gender; }
+  if (department) { match.department = department; }
+  if (level) { match.level = level; }
   const pipeline = [
-    { $match: { role: 'student', updatedAt: { $gte: since } } },
+    { $match: match },
     { $sort: { updatedAt: -1, _id: -1 } },
     { $limit: lim },
     { $lookup: {
@@ -102,6 +113,7 @@ export async function listRecentStudentsService({ hours = 24, limit = 50 }) {
   const data = await User.aggregate(pipeline);
   const mapped = data.map(d => ({ id: d._id, fullName: d.fullName, email: d.email, matricNumber: d.matricNumber, level: d.level, allocationStatus: d.allocationStatus, createdAt: d.createdAt, updatedAt: d.updatedAt }));
   return { hours: h, count: mapped.length, data: mapped };
+
 }
 
 export async function updateStudentStatusService(studentId, status) {

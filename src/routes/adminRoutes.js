@@ -5,7 +5,7 @@ import { protect } from "../middleware/authMiddleware.js";
 import { permit } from "../middleware/roleMiddleware.js";
 import { listStudents, listUnallocatedStudents, listRecentStudents, updateStudentStatus, getSummary, exportReport, createAdminUser } from "../controllers/adminController.js";
 import { createHostel, listHostels } from "../controllers/hostelController.js";
-import { createRoom, listRoomsByHostel } from "../controllers/roomController.js";
+import { createRoom, listRoomsByHostel, listUnallocatedRooms } from "../controllers/roomController.js";
 import { adminCreateAllocation, listAllocations } from "../controllers/allocationController.js";
 import { validate } from "../middleware/validate.js";
 import { createHostelSchema } from "../validators/hostel.validator.js";
@@ -67,6 +67,12 @@ router.post("/admins", protect, permit("super-admin", "admin"), validate(createA
  *       - in: query
  *         name: gender
  *         schema: { type: string, enum: [male, female] }
+ *       - in: query
+ *         name: department
+ *         schema: { type: string }
+ *       - in: query
+ *         name: level
+ *         schema: { type: string, enum: [100,200,300,400,500] }
  *     responses:
  *       200:
  *         description: Paged students list
@@ -104,6 +110,15 @@ router.get("/students", protect, permit("admin"), listStudents);
  *         name: session
  *         schema: { type: string }
  *         description: Filter by academic session label
+ *       - in: query
+ *         name: gender
+ *         schema: { type: string, enum: [male, female] }
+ *       - in: query
+ *         name: department
+ *         schema: { type: string }
+ *       - in: query
+ *         name: level
+ *         schema: { type: string, enum: [100,200,300,400,500] }
  *     responses:
  *       200:
  *         description: Paged unallocated students list
@@ -142,6 +157,15 @@ router.get("/students/unallocated", protect, permit("admin"), listUnallocatedStu
  *         name: limit
  *         schema: { type: integer, minimum: 1, maximum: 200 }
  *         description: Max number of records (default 50)
+ *       - in: query
+ *         name: gender
+ *         schema: { type: string, enum: [male, female] }
+ *       - in: query
+ *         name: department
+ *         schema: { type: string }
+ *       - in: query
+ *         name: level
+ *         schema: { type: string, enum: [100,200,300,400,500] }
  *     responses:
  *       200:
  *         description: Recently active students
@@ -319,6 +343,50 @@ router.get("/hostels/:hostelId/rooms", protect, permit("admin"), listRoomsByHost
 
 /**
  * @swagger
+ * /api/admin/rooms/unallocated:
+ *   get:
+ *     summary: List rooms with remaining capacity
+ *     description: Returns paginated rooms where occupied < capacity. Optional hostel filter.
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, minimum: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 1, maximum: 100 }
+ *       - in: query
+ *         name: hostelId
+ *         schema: { type: string }
+ *         description: Filter by hostel
+ *     responses:
+ *       200:
+ *         description: Paged list of rooms with availability
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id: { type: string }
+ *                       roomNumber: { type: string }
+ *                       type: { type: string }
+ *                       capacity: { type: integer }
+ *                       occupied: { type: integer }
+ *                       remaining: { type: integer }
+ *                 meta: { $ref: '#/components/schemas/PagedMeta' }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ */
+router.get("/rooms/unallocated", protect, permit("admin"), listUnallocatedRooms);
+
+/**
+ * @swagger
  * /api/admin/allocations:
  *   post:
  *     summary: Create an allocation (admin)
@@ -361,6 +429,26 @@ router.post("/allocations", protect, permit("admin"), validate(adminCreateAlloca
  *       - in: query
  *         name: status
  *         schema: { type: string, enum: [pending, approved, rejected] }
+ *       - in: query
+ *         name: session
+ *         schema: { type: string }
+ *       - in: query
+ *         name: gender
+ *         schema: { type: string, enum: [male, female] }
+ *       - in: query
+ *         name: department
+ *         schema: { type: string }
+ *       - in: query
+ *         name: level
+ *         schema: { type: string, enum: [100,200,300,400,500] }
+ *       - in: query
+ *         name: allocatedFrom
+ *         schema: { type: string, format: date-time }
+ *         description: ISO date/time lower bound (allocatedAt >=)
+ *       - in: query
+ *         name: allocatedTo
+ *         schema: { type: string, format: date-time }
+ *         description: ISO date/time upper bound (allocatedAt <=)
  *     responses:
  *       200:
  *         description: Paged allocations list

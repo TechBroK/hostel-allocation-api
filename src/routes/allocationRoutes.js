@@ -119,6 +119,36 @@ router.post("/approve-pairing", protect, permit("admin"), approvePairing);
  *     summary: List all allocations (admin)
  *     tags: [Allocations]
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, minimum: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 1, maximum: 100 }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [pending, approved, rejected] }
+ *       - in: query
+ *         name: session
+ *         schema: { type: string }
+ *       - in: query
+ *         name: gender
+ *         schema: { type: string, enum: [male, female] }
+ *       - in: query
+ *         name: department
+ *         schema: { type: string }
+ *       - in: query
+ *         name: level
+ *         schema: { type: string, enum: [100,200,300,400,500] }
+ *       - in: query
+ *         name: allocatedFrom
+ *         schema: { type: string, format: date-time }
+ *         description: ISO date/time lower bound (allocatedAt >=)
+ *       - in: query
+ *         name: allocatedTo
+ *         schema: { type: string, format: date-time }
+ *         description: ISO date/time upper bound (allocatedAt <=)
  *     responses:
  *       200: { description: List of allocations }
  */

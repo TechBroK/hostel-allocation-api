@@ -1,80 +1,80 @@
-import { jest } from '@jest/globals';
+import mongoose from 'mongoose';
 import User from '../src/models/User.js';
 import Allocation from '../src/models/Allocation.js';
 import Room from '../src/models/Room.js';
+import Hostel from '../src/models/Hostel.js';
 import { listStudentsService, exportReportService } from '../src/services/controllers/adminService.js';
 
-function mockQuery(returnValue) {
-  return { select: jest.fn().mockReturnThis(), skip: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), lean: jest.fn().mockResolvedValue(returnValue) };
-}
-
-describe('adminService.listStudentsService', () => {
-  beforeEach(() => {
-    // stub methods fresh each test
-    User.find = jest.fn();
-    User.countDocuments = jest.fn();
-    Allocation.findOne = jest.fn();
+describe('adminService.listStudentsService (aggregation)', () => {
+  beforeAll(async () => {
+    if (!mongoose.connection.readyState) {
+      await mongoose.connect(process.env.MONGO_URL || 'mongodb://127.0.0.1:27017/hostel_unit');
+    }
   });
-  afterEach(() => jest.clearAllMocks());
-
-  it('returns paged students with allocation status pending when no allocation', async () => {
-    const userDocs = [ { _id: 'u1', fullName: 'Alice', matricNumber: 'MAT1', level: '100', email: 'a@x.com' } ];
-    User.find.mockReturnValue({
-      select: () => ({
-        skip: () => ({
-          limit: () => userDocs
-        })
-      })
-    });
-    User.countDocuments.mockResolvedValue(1);
-    Allocation.findOne.mockReturnValue({ sort: () => ({ lean: () => Promise.resolve(null) }) });
-
-    const res = await listStudentsService({ page: 1, limit: 10 });
-  expect(res.data[0]).toMatchObject({ fullName: 'Alice', status: 'pending' });
-  expect(res.meta.total).toBe(1);
+  afterAll(async () => {
+    await mongoose.connection.dropDatabase();
+    await mongoose.disconnect();
+  });
+  beforeEach(async () => {
+    await Allocation.deleteMany({});
+    await User.deleteMany({});
+    await Room.deleteMany({});
+    await Hostel.deleteMany({});
   });
 
-  it('marks student allocated when allocation exists', async () => {
-    const userDocs = [ { _id: 'u2', fullName: 'Bob', matricNumber: 'MAT2', level: '200', email: 'b@x.com' } ];
-    User.find.mockReturnValue({
-      select: () => ({
-        skip: () => ({
-          limit: () => userDocs
-        })
-      })
-    });
-    User.countDocuments.mockResolvedValue(1);
-    Allocation.findOne.mockReturnValue({ sort: () => ({ lean: () => Promise.resolve({ status: 'allocated' }) }) });
-
+  it('returns pending status when no allocation exists', async () => {
+    const s = await User.create({ fullName: 'Alice', email: 'alice@test.com', password: 'Pass1234!', role: 'student', gender: 'female', department: 'Computer Science', level: '100' });
     const res = await listStudentsService({ page: 1, limit: 10 });
-  expect(res.data[0]).toMatchObject({ fullName: 'Bob', status: 'allocated' });
+    expect(res.data[0]).toMatchObject({ fullName: 'Alice', status: 'pending' });
+    expect(res.meta.total).toBe(1);
+  });
+
+  it('reflects allocated status when allocation exists', async () => {
+    const s = await User.create({ fullName: 'Bob', email: 'bob@test.com', password: 'Pass1234!', role: 'student', gender: 'male', department: 'Computer Science', level: '200' });
+    await Allocation.create({ student: s._id, session: '2025', status: 'approved', allocatedAt: new Date() });
+    const res = await listStudentsService({ page: 1, limit: 10 });
+  // Allocation.status is 'approved'; aggregation surfaces 'approved'
+  expect(res.data[0]).toMatchObject({ fullName: 'Bob', status: 'approved' });
   });
 });
 
-describe('adminService.exportReportService', () => {
-  beforeEach(() => {
-    User.find = jest.fn();
-    Room.find = jest.fn();
-    Allocation.find = jest.fn();
+describe('adminService.exportReportService (integration aggregates)', () => {
+  beforeAll(async () => {
+    if (!mongoose.connection.readyState) {
+      await mongoose.connect(process.env.MONGO_URL || 'mongodb://127.0.0.1:27017/hostel_unit');
+    }
   });
-  afterEach(() => jest.clearAllMocks());
+  afterAll(async () => {
+    await mongoose.connection.dropDatabase();
+    await mongoose.disconnect();
+  });
+  beforeEach(async () => {
+    await Allocation.deleteMany({});
+    await User.deleteMany({});
+    await Room.deleteMany({});
+    await Hostel.deleteMany({});
+  });
 
   it('exports students csv with correct header', async () => {
-  User.find.mockReturnValue({ select: () => ({ lean: () => Promise.resolve([{ _id: 'u1', fullName: 'Al', matricNumber: 'M1', email: 'e@e', level: '100' }]) }) });
+    await User.create({ fullName: 'Al', email: 'al@test.com', password: 'x', role: 'student', level: '100', department: 'Computer Science', gender: 'male' });
     const { filename, csv } = await exportReportService({ type: 'students', format: 'csv' });
     expect(filename).toBe('students.csv');
     expect(csv.split('\n')[0]).toBe('id,fullName,matricNumber,email,level');
   });
 
   it('exports rooms csv with correct header', async () => {
-  Room.find.mockReturnValue({ populate: () => ({ lean: () => Promise.resolve([{ _id: 'r1', hostel: { name: 'H1' }, roomNumber: '101', type: 'standard', capacity: 4, occupied: 2 }]) }) });
+    const hostel = await Hostel.create({ name: 'H1', type: 'male', capacity: 50 });
+    await Room.create({ hostel: hostel._id, roomNumber: '101', type: 'Standard', capacity: 4, occupied: 2 });
     const { filename, csv } = await exportReportService({ type: 'rooms', format: 'csv' });
     expect(filename).toBe('rooms.csv');
     expect(csv.split('\n')[0]).toBe('id,hostel,roomNumber,type,capacity,occupied');
   });
 
   it('exports allocations csv with correct header as default', async () => {
-  Allocation.find.mockReturnValue({ populate: () => ({ populate: () => ({ lean: () => Promise.resolve([{ _id: 'a1', student: { fullName: 'Al', matricNumber: 'M1' }, room: { roomNumber: '101' }, status: 'allocated', allocatedAt: 'date' }]) }) }) });
+    const hostel = await Hostel.create({ name: 'H2', type: 'male', capacity: 50 });
+    const room = await Room.create({ hostel: hostel._id, roomNumber: '102', type: 'Standard', capacity: 2 });
+    const stu = await User.create({ fullName: 'Al2', email: 'al2@test.com', password: 'x', role: 'student', level: '200', department: 'Computer Science', gender: 'male' });
+    await Allocation.create({ student: stu._id, room: room._id, session: '2025', status: 'approved', allocatedAt: new Date() });
     const { filename, csv } = await exportReportService({});
     expect(filename).toBe('allocations.csv');
     expect(csv.split('\n')[0]).toBe('id,student,matricNumber,roomNumber,status,allocatedAt');

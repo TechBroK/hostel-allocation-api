@@ -9,38 +9,53 @@ import { allocateStudent, recordApprovedPairing, listApprovedPairings, traitSign
 import { submitStudentAllocation } from "../services/allocationSubmission.js";
 
 export const submitAllocation = async (req, res, next) => {
-  try {
+  const maxRetries = 3;
+  let attempt = 0;
+  while (attempt < maxRetries) {
     const t0 = Date.now();
     const sessionMongo = await Allocation.startSession();
-    sessionMongo.startTransaction();
-    const studentId = req.user._id;
-    const { session: academicSessionLabel } = req.validated || req.body;
-    const { allocation, paired, compatibilityMeta } = await submitStudentAllocation({
-      session: sessionMongo,
-      studentId,
-      sessionLabel: academicSessionLabel
-    });
-    await sessionMongo.commitTransaction();
-    sessionMongo.endSession();
-    logInfo('allocation.submit.success', {
-      allocationId: allocation._id.toString(),
-      paired,
-      compatibilityRange: compatibilityMeta?.range,
-      durationMs: Date.now() - t0
-    });
-    return res.status(201).json({
-      id: allocation._id,
-      status: allocation.status,
-      autoPaired: paired,
-      roomId: allocation.room || null,
-      compatibility: compatibilityMeta,
-    });
-  } catch (err) {
-    logError('allocation.submit.error', { message: err.message, stack: err.stack });
-    if (err?.code === 11000) {
-      return next(new ValidationError("Allocation for this student & session already exists"));
+    try {
+      sessionMongo.startTransaction();
+      const studentId = req.user._id;
+      const { session: academicSessionLabel } = req.validated || req.body;
+      const { allocation, paired, compatibilityMeta } = await submitStudentAllocation({
+        session: sessionMongo,
+        studentId,
+        sessionLabel: academicSessionLabel
+      });
+      await sessionMongo.commitTransaction();
+      sessionMongo.endSession();
+      logInfo('allocation.submit.success', {
+        allocationId: allocation._id.toString(),
+        paired,
+        compatibilityRange: compatibilityMeta?.range,
+        durationMs: Date.now() - t0,
+        attempt: attempt + 1
+      });
+      return res.status(201).json({
+        id: allocation._id,
+        status: allocation.status,
+        autoPaired: paired,
+        roomId: allocation.room || null,
+        compatibility: compatibilityMeta,
+      });
+    } catch (err) {
+      await sessionMongo.abortTransaction().catch(() => {});
+      sessionMongo.endSession();
+      // Mongo write conflict / catalog change transient errors often expose code 112
+      if (err?.code === 112 && attempt < maxRetries - 1) {
+        const backoff = 50 * Math.pow(2, attempt); // 50ms, 100ms
+        logError('allocation.submit.retry', { attempt: attempt + 1, backoffMs: backoff, code: err.code, message: err.message });
+        await new Promise(r => setTimeout(r, backoff));
+        attempt += 1;
+        continue; // retry
+      }
+      logError('allocation.submit.error', { message: err.message, stack: err.stack, attempt: attempt + 1, code: err.code });
+      if (err?.code === 11000) {
+        return next(new ValidationError("Allocation for this student & session already exists"));
+      }
+      return next(err);
     }
-    return next(err);
   }
 };
 
@@ -79,17 +94,136 @@ export const adminCreateAllocation = async (req, res, next) => {
 export const listAllocations = async (req, res, next) => {
   try {
     const { page, limit, skip } = getPaginationParams(req.query);
-    const [allocations, total] = await Promise.all([
-      Allocation.find()
-        .populate("student", "fullName matricNumber email")
-        .populate({ path: "room", populate: { path: "hostel", model: "Hostel" } })
-        .sort({ allocatedAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      Allocation.countDocuments()
-    ]);
-    return res.json(buildPagedResponse({ items: allocations, total, page, limit }));
+    const {
+      session,
+      status,
+      gender,
+      department,
+      level,
+      allocatedFrom,
+      allocatedTo,
+    } = req.query || {};
+
+    // Build initial match for allocation-level filters
+    const match = {};
+  if (session) { match.session = session; }
+  if (status) { match.status = status; }
+    if (allocatedFrom || allocatedTo) {
+      const range = {};
+      if (allocatedFrom) {
+        const d = new Date(allocatedFrom);
+        if (!isNaN(d)) { range.$gte = d; }
+      }
+      if (allocatedTo) {
+        const d = new Date(allocatedTo);
+        if (!isNaN(d)) { range.$lte = d; }
+      }
+      if (Object.keys(range).length) { match.allocatedAt = range; }
+    }
+
+    // Aggregation pipeline
+    const pipeline = [
+      { $match: match },
+      { $sort: { allocatedAt: -1, _id: -1 } },
+      // Join student
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'student',
+          foreignField: '_id',
+          as: 'student'
+        }
+      },
+      { $unwind: '$student' },
+      // Student-level filters
+      {
+        $match: {
+          ...(gender ? { 'student.gender': gender } : {}),
+          ...(department ? { 'student.department': department } : {}),
+          ...(level ? { 'student.level': level } : {}),
+        }
+      },
+      // Join room
+      {
+        $lookup: {
+          from: 'rooms',
+          localField: 'room',
+          foreignField: '_id',
+          as: 'room'
+        }
+      },
+      { $unwind: { path: '$room', preserveNullAndEmptyArrays: true } },
+      // Join hostel
+      {
+        $lookup: {
+          from: 'hostels',
+          localField: 'room.hostel',
+          foreignField: '_id',
+          as: 'hostel'
+        }
+      },
+      { $unwind: { path: '$hostel', preserveNullAndEmptyArrays: true } },
+      // Shape output
+      {
+        $project: {
+          id: '$_id',
+          _id: 0,
+          status: 1,
+          session: 1,
+            allocatedAt: 1,
+          autoPaired: 1,
+          compatibility: {
+            score: '$compatibilityScore',
+            range: '$compatibilityRange'
+          },
+          student: {
+            id: '$student._id',
+            fullName: '$student.fullName',
+            matricNumber: '$student.matricNumber',
+            email: '$student.email',
+            gender: '$student.gender',
+            level: '$student.level',
+            department: '$student.department'
+          },
+          room: '$room._id',
+          roomDetails: {
+            $cond: [
+              { $ifNull: ['$room._id', false] },
+              {
+                roomNumber: '$room.roomNumber',
+                type: '$room.type',
+                capacity: '$room.capacity'
+              },
+              null
+            ]
+          },
+          hostel: {
+            $cond: [
+              { $ifNull: ['$hostel._id', false] },
+              { id: '$hostel._id', name: '$hostel.name', type: '$hostel.type' },
+              null
+            ]
+          }
+        }
+      },
+      // Pagination facet
+      {
+        $facet: {
+          meta: [ { $count: 'total' } ],
+          data: [ { $skip: skip }, { $limit: limit } ]
+        }
+      },
+      {
+        $project: {
+          data: 1,
+          total: { $ifNull: [ { $arrayElemAt: [ '$meta.total', 0 ] }, 0 ] }
+        }
+      }
+    ];
+
+    const aggResult = await Allocation.aggregate(pipeline);
+    const { data = [], total = 0 } = aggResult[0] || {};
+    return res.json(buildPagedResponse({ items: data, total, page, limit }));
   } catch (err) {
     return next(err);
   }

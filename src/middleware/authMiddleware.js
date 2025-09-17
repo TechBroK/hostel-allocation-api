@@ -12,7 +12,9 @@ export const protect = async (req, res, next) => {
   const token = header.split(" ")[1];
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id).select("-password");
+  // Support tokens that may encode either id or _id claim
+  const userId = decoded.id || decoded._id;
+  const user = await User.findById(userId).select("-password");
     if (!user) {
       return res.status(401).json({ message: "User not found" });
     }
