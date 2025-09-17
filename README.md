@@ -132,7 +132,7 @@ Add tests for controller error paths, utility modules, and allocation edge cases
 | Flaky allocation writes | Expected retries (code 112) — investigate only if persistent |
 | Low coverage | Expand tests; verify `collectCoverageFrom` globs |
 
-## � Example Login Request
+## 🧾 Example Login Request
 
 ```bash
 curl -X POST http://localhost:8080/api/auth/login \
@@ -187,12 +187,14 @@ Defaults: `page=1`, `limit=20`, max limit = 100.
 
 `GET /healthz` returns service + database connectivity snapshot:
 
+```json
 {
   "status": "ok",
   "uptime": 123.45,
   "timestamp": "2025-09-14T10:11:12.345Z",
   "db": "connected"
 }
+```
 ```
 
 ---
@@ -208,8 +210,6 @@ npm run lint      # analyze code
 npm run lint:fix  # auto-fix where possible
 ```
 Prettier settings in `.prettierrc` (width 90, double quotes, semicolons). Editor settings normalized by `.editorconfig`.
-
-npm run lint:fix && npm run lint
 ```
 
 ---
@@ -229,208 +229,30 @@ npm run lint:fix && npm run lint
 ## 🧱 Architecture Notes
 
 - ES Modules enabled via `"type": "module"`
-
----
-- Helmet for HTTP headers
+- Helmet for HTTP headers (recommended hardening; add if not present yet)
 - Password complexity validation
-- Refresh token rotation strategy (if sessions needed)
+- Potential refresh token rotation strategy (future enhancement if sessions added)
 
 
-## 🧩 Compatibility & Allocation Algorithm
+## 🧩 Compatibility & Allocation Algorithm (Summary)
 
-  "sleepSchedule": "early|flexible|late",
-  "cleanlinessLevel": 1,
-  "socialPreference": "introvert|balanced|extrovert",
-  "noisePreference": "quiet|tolerant|noisy",
-  "hobbies": ["reading","basketball"],
-  "musicPreference": "afrobeat",
-  "visitorFrequency": "rarely|sometimes|often"
-}
+Students can optionally supply lifestyle & preference traits (sleep schedule, study habits, social preference, cleanliness, hobbies, etc.). These are normalized to numeric vectors; pair compatibility = weighted cosine similarity blended with hobby/music affinity and penalties for extreme conflicts. Scores map to ranges (veryHigh/high/moderate/low) that drive auto-pairing decisions and admin review.
 
-Categorical traits are mapped to a 0..1 scale (e.g. `early -> 0`, `flexible -> 0.5`, `late -> 1`). `cleanlinessLevel` (1–5) is scaled to 0..1. Hobbies use Jaccard similarity; music is exact match or neutral (0.5 if unspecified).
+Key behaviors:
+- Auto-pairing on submission if a high/veryHigh counterpart exists and a suitably capacious room is available.
+- Reallocation uses the same compatibility guardrails (must be ≥ moderate with all occupants).
+- Transactions wrap allocation & reallocation to avoid race conditions.
+- Adaptive weighting lightly reinforces historically successful (approved) pair traits.
 
-### Similarity Calculation
-
-1. Base vector similarity (default: weighted cosine). Optional weighted Euclidean can be toggled.
-2. Affinity (hobbies + music) blended at 25% weight.
-3. Penalties applied for extreme mismatches (sleep, cleanliness, noise) > 0.8 distance.
-4. Result scaled to integer percentage (0–100).
-
-### Compatibility Ranges (Updated)
-
-| Range | Score | Meaning | Default Status |
-|-------|-------|---------|----------------|
-| veryHigh | 85–100 | Exceptional alignment | auto-pair (capacity permitting) |
-| high | 70–84 | Strong match | suggest / fast-track |
-| moderate | 55–69 | Viable but review | needs-admin |
-| low | <55 | Poor fit | reject |
-
-### Endpoint: Match Suggestions
-
-### Admin Approval & Adaptive Weights
-
-Persisted approvals stored in `ApprovedPairing`.
-
-Endpoints:
-
-- `POST /api/allocations/approve-pairing` (admin)
-- `GET /api/allocations/approved-pairings` (admin)
-
-
-Every 25 approvals lightly boosts cleanliness & sleep weights (demo adaptation).
-
-### Personality Traits Update
-
-`PUT /api/students/:studentId/personality` updates trait profile; cached suggestions automatically invalidate via signature change.
-
-### Suggestions Caching
-
-In-memory TTL cache (5 minutes) keyed by `studentId|traitSignature` to avoid recomputation for unchanged traits.
-
-### Auto Allocation
-
-Two mechanisms now reduce admin overhead:
-
-1. Student submission auto-pairing: when a student submits an allocation request, the system attempts to find a compatible (veryHigh/high) pending student and selects the "best" room (heuristic: highest free capacity ratio, light jitter tie-break) with at least 2 free slots. If successful, both are immediately approved and assigned inside a MongoDB transaction.
-2. Admin batch auto allocation (legacy): `POST /api/allocations/auto-allocate` can still be used for explicit pairing when needed.
-
-### Reallocation (Admin)
-
-`PATCH /api/allocations/:allocationId/reallocate` with body `{ "targetRoomId": "..." }` moves a student to another room (under a MongoDB transaction) if:
-
-- Target room has free capacity
-- Compatibility with every existing occupant is >= moderate
-- Occupant counts are updated atomically
-
-On success:
-
-
-If compatibility fails with any occupant, the reallocation is rejected (no partial updates thanks to the transaction).
-
-### Transactional Safety
-
-Auto-pairing during submission and reallocation operations run inside MongoDB transactions to avoid race conditions (e.g., two simultaneous submissions grabbing the last slots). Duplicate allocation attempts per session are guarded by a compound unique index (`student + session`).
-
-### Uniqueness Constraint
-
-`Allocation` schema defines `index({ student: 1, session: 1 }, { unique: true })`. Duplicate key errors are surfaced as validation errors with a clear message.
-
-### Smarter Room Selection (Heuristic)
-
-- Filters rooms with available capacity.
-- Scores each by `(1 - occupied/capacity) + jitter` to prioritize rooms that keep capacity utilization balanced.
-- Future improvements: cluster-compatible cohorts, gender-specific hostel filtering (pending gender field on `User`), fairness rotation.
-
-### Future ML Enhancement Ideas
-
-- Replace heuristic penalty with learned coefficients (e.g., logistic regression over “satisfied vs not”).
-- Consider clustering to pre-group compatible cohorts before individual pairing.
-- Introduce negative feedback loops (e.g., conflict reports) to decay certain trait weightings.
-
-### Integration Notes
-
-- Algorithm is pure & side-effect free (except for optional approval recording) → easy to test.
-- Room capacity + hostel gender constraints are enforced separately (this module only ranks human compatibility).
-- Add caching layer keyed by `traitSignature(user)` if performance becomes a concern at scale.
----
+Full algorithm, trait schema, ranges, caching and future ML roadmap: see `docs/compatibility.md`.
 
 ## 🧭 Roadmap Ideas
-- Allocation algorithm (auto-assignment + fairness logic)
+
 - Notifications/email integration
 - Soft deletes & audit logs
-- Admin dashboard metrics aggregation
-- Test coverage (Jest + Supertest)
-- CI pipeline & Docker containerization
-
-
-### Overview
-
-The test suite uses **Jest** with an **in-memory MongoDB replica set** (`MongoMemoryReplSet`) enabling:
-
-- Transaction support (allocation submissions)
-- Isolation (no local Mongo dependency)
-- Deterministic cleanup (collections cleared after each test)
-
-### Running Tests
-
-```bash
-npm test
-```
-
-Jest loads `tests/jest.setup.js` (bootstrap + replica set). Coverage enabled via `jest.config.mjs`.
-
-### Structure
-
-```text
-tests/
-  utils/testDb.js
-  *.test.js
-```
-
-### Database Strategy
-- Single-member replica set (WiredTiger)
-- Truncate collections after each test
-- Drop DB + stop server after all tests
-- No real `MONGO_URI` required
-
-
-1. Create `tests/exampleFeature.test.js`.
-2. Import `app` and use `supertest`.
-3. Seed with Mongoose models inline.
-4. Assert on JSON responses.
-```js
-import request from 'supertest';
-import app from '../src/app.js';
-import User from '../src/models/User.js';
-
-test('creates a user', async () => {
-  await User.create({ fullName: 'Test', email: 'ex@example.com', password: 'Pass1234!', role: 'student' });
-  const res = await request(app).get('/api/students?limit=1');
-  expect(res.status).toBe(200);
-});
-```
-
-### Transaction Errors
-
-If you see:
-
-```text
-Transaction numbers are only allowed on a replica set member or mongos
-```
-
-Replica set init was skipped—verify `jest.setup.js` executed.
-
-### Transient Write Conflicts
-
-Log lines `allocation.submit.retry` indicate a handled retry (code 112) — expected under parallel writes.
-
-### Coverage
-
-Improve by covering:
-
-- Controller error paths
-- Utility modules (caching, responses)
-- Room selection and complaint edge cases
-
-### Troubleshooting Table
-
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| Duplicate tests | Stray file outside `tests/` | Remove/move file |
-| Transaction error | Missing replica set | Ensure setup file runs |
-| Hanging tests | Unawaited async / app.listen used | Remove listen, await promises |
-| Flaky allocations | Transient conflicts | Retries already in place |
-| Low coverage | Glob misses files | Adjust `collectCoverageFrom` |
-
-### Performance / Load Tests
-
-Place in `tests/perf/` and run explicitly:
-
-```bash
-npm test -- --testPathPattern=perf
-```
-
----
+- Admin dashboard metrics & dashboards
+- CI pipeline, Docker image & deployment templates
+- ML-driven adaptive compatibility weighting
 
 ## 🤝 Contribution Guide (Lightweight)
 
