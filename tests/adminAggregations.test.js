@@ -1,12 +1,11 @@
-import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
 import request from 'supertest';
 
-import app from '../app.js';
-import User from '../models/User.js';
-import Room from '../models/Room.js';
-import Allocation from '../models/Allocation.js';
-import Hostel from '../models/Hostel.js';
+import app from '../src/app.js';
+import User from '../src/models/User.js';
+import Room from '../src/models/Room.js';
+import Allocation from '../src/models/Allocation.js';
+import Hostel from '../src/models/Hostel.js';
 
 // Helper to create auth token
 function tokenFor(user) {
@@ -37,29 +36,10 @@ async function bootstrapAllocationsDataset() {
   const s1 = await createStudent({ gender: 'male', department: 'Computer Science', level: '200' });
   const s2 = await createStudent({ gender: 'male', department: 'Mathematics', level: '300' });
   const s3 = await createStudent({ gender: 'female', department: 'Mass Communication', level: '200' });
-  // Approved allocation for s1
   await Allocation.create({ student: s1._id, room: room._id, session: '2025', status: 'approved', allocatedAt: new Date(Date.now() - 3600 * 1000) });
-  // Pending allocation for s2
   await Allocation.create({ student: s2._id, session: '2025', status: 'pending' });
   return { admin, hostel, room, students: { s1, s2, s3 } };
 }
-
-beforeAll(async () => {
-  if (!mongoose.connection.readyState) {
-    await mongoose.connect(process.env.MONGO_URL || 'mongodb://127.0.0.1:27017/hostel_test');
-  }
-});
-
-// Teardown: avoid dropDatabase to prevent race with other suites; collections are already cleared in beforeEach.
-afterAll(async () => {
-  if (mongoose.connection.readyState === 1) {
-    try {
-      await mongoose.disconnect();
-    } catch {
-      // swallow disconnect errors to not fail suite teardown
-    }
-  }
-});
 
 beforeEach(async () => {
   await Allocation.deleteMany({});
@@ -73,11 +53,10 @@ describe('Admin aggregation endpoints', () => {
     const admin = await createAdmin();
     const token = tokenFor(admin);
     const res = await request(app).get('/api/admin/students').set('Authorization', `Bearer ${token}`);
-  expect(res.status).toBe(200);
-  // listStudentsService returns paged response { data, meta }
-  expect(Array.isArray(res.body.data)).toBe(true);
-  expect(res.body.data.length).toBe(0);
-  expect(res.body.meta.total).toBe(0);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.data)).toBe(true);
+    expect(res.body.data.length).toBe(0);
+    expect(res.body.meta.total).toBe(0);
   });
 
   test('Allocations listing returns shape & filters', async () => {
@@ -107,8 +86,6 @@ describe('Admin aggregation endpoints', () => {
     const token = tokenFor(admin);
     const res = await request(app).get('/api/admin/students/recent?gender=female').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
-    // All returned should be female
-  // gender might not be in projection; relax to presence of data
     expect(Array.isArray(res.body.data)).toBe(true);
   });
 });

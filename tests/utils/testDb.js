@@ -1,24 +1,22 @@
 import mongoose from 'mongoose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
 
-let mongo = null;
+let replset = null;
 
 export async function startTestDb() {
-  if (mongo) return mongo;
-  mongo = await MongoMemoryServer.create();
-  const uri = mongo.getUri();
-  await mongoose.connect(uri, {
-    dbName: 'test'
-  });
-  return mongo;
+  if (replset) return replset;
+  replset = await MongoMemoryReplSet.create({ replSet: { storageEngine: 'wiredTiger', count: 1 } });
+  const uri = replset.getUri();
+  await mongoose.connect(uri, { dbName: 'test' });
+  return replset;
 }
 
 export async function stopTestDb() {
   await mongoose.connection.dropDatabase().catch(() => {});
   await mongoose.connection.close().catch(() => {});
-  if (mongo) {
-    await mongo.stop();
-    mongo = null;
+  if (replset) {
+    await replset.stop();
+    replset = null;
   }
 }
 

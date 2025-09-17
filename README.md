@@ -32,384 +32,116 @@ A Node.js/Express REST API for managing student hostel allocations, rooms, hoste
 | Framework | Express 5 |
 | Database | MongoDB + Mongoose |
 | Auth | JWT (jsonwebtoken) |
-| Security | Role-based middleware |
+| Security | Role-based middleware, bcrypt |
 | Docs | swagger-ui-express + swagger-jsdoc |
-| Uploads | multer (to local `uploads/`) |
+| Uploads | multer |
 
----
+## 🧪 Testing
 
-## 🗂 Folder Structure
+### Overview
+
+The test suite uses **Jest** with an **in‑memory MongoDB replica set** (via `mongodb-memory-server`’s `MongoMemoryReplSet`) so that:
+
+- Multi-document transactions used in allocation submission work reliably.
+- Tests run isolated with no dependency on a developer’s local Mongo daemon.
+- Each test file sees a clean logical database (collections truncated after each test).
+
+### Running Tests
+```bash
+npm test
+```
+
+The project’s Jest config (`jest.config.mjs`) collects coverage and uses `tests/jest.setup.js` for environment bootstrapping.
+
+### Structure
 
 ```text
-src/
-  app.js                # App bootstrap & route mounting
-  createSuperAdmin.js   # Script to seed super-admin
-  config/
-    db.js               # Mongo connection
-    swagger.js          # Swagger/OpenAPI spec setup
-  controllers/          # (Business logic per resource)
-  middleware/
-    authMiddleware.js   # JWT protect middleware
-    roleMiddleware.js   # Role-based access control
-  models/               # Mongoose schemas
-  routes/               # Express routers per resource
-uploads/                 # Avatar uploads (local dev)
+tests/
+  jest.setup.js            # Starts replica set & hooks (beforeAll/afterEach/afterAll)
+  utils/testDb.js          # Start/stop/clear helpers (replica set abstraction)
+  *.test.js                # API + service tests (integration-style)
 ```
 
----
+Legacy folders `src/tests` and `src/__tests__` were removed/retired; all new tests should live under `tests/`.
 
-## 🔐 Roles Overview
 
-| Role | Capabilities |
-|------|--------------|
-| student | Register/login, submit allocation, manage profile, upload avatar, submit complaints |
-| admin | All student capabilities + manage hostels, rooms, allocations, view reports |
-| super-admin | All admin capabilities + create new admin users |
+- Replica set (single member, WiredTiger) created once per test run.
+- After each test: every collection is truncated (`deleteMany({})`).
+- After all tests: DB dropped then replica set stopped.
+- No real `MONGO_URI` needed; the in-memory URI is generated dynamically.
 
----
+### Writing a New Test
 
-## ⚙️ Environment Variables
-
-Create a `.env` file in the project root:
-
-```bash
-MONGO_URI=mongodb://localhost:27017/hostel_allocation
-JWT_SECRET=replace_with_a_strong_secret
-PORT=8080
-# Optional super-admin seeding values
-SUPER_ADMIN_EMAIL=superadmin@example.com
-SUPER_ADMIN_PASSWORD=SuperAdmin@123
-SUPER_ADMIN_NAME=Super Admin
-# Fairness / worker tuning
-ALLOCATION_STALE_MINUTES=10
-CONFLICT_RESOLVER_INTERVAL_MS=60000
-CONFLICT_RESOLVER_BATCH=25
-CONFLICT_RESOLVER_DISABLED=0
-```
-
----
-
-## 🚀 Getting Started
-
-### 1. Install Dependencies
-
-```bash
-npm install
-```
-
-### 2. Run Development Server
-
-```bash
-npm run start
-```
-Server runs at: `http://localhost:${PORT || 8080}`
-
-### 3. Seed Super Admin
-
-Creates an initial `super-admin` (skips if one exists):
-
-```bash
-npm run create-super-admin
-```
-
-### 4. Demo Data Seeding
-
-Populate the database with realistic demo data (students with personality traits, hostels, rooms, pending + some approved allocations, and complaints):
-
-```bash
-npm run seed:demo
-```
-
-Options (pass as args):
-
-```text
-students=150 hostelsPerGender=4 roomsPerHostel=18 complaints=40 session=2025
-```
+1. Create `tests/someFeature.test.js`.
+2. Import the Express app directly (`import app from '../src/app.js'`).
+3. Use `supertest` to make requests; no need to listen on a port.
 
 Example:
 
-```bash
-npm run seed:demo -- students=150 hostelsPerGender=4 roomsPerHostel=18 complaints=50
+```js
+import request from 'supertest';
+import app from '../src/app.js';
+import User from '../src/models/User.js';
+
+describe('Example feature', () => {
+  test('creates a user', async () => {
+    await User.create({ fullName: 'Test', email: 'ex@example.com', password: 'Pass1234!', role: 'student' });
+    const res = await request(app).get('/api/students?limit=1');
+    expect(res.status).toBe(200);
+    expect(res.body.data.length).toBeGreaterThan(0);
+  });
+});
 ```
 
-Keep existing data (do not wipe) with:
-
-```bash
-npm run seed:demo:keep
-```
-
-Clear all demo collections:
-
-```bash
-npm run seed:clear
-```
-
-Seed output includes the shared demo password for all generated students.
-
-### 5. Allocation Load Simulation
-
-Simulate a wave of concurrent allocation submissions to observe fairness rotation and pairing performance.
-
-Prepare a tokens file (one JWT per line for student users):
-
-```bash
-cat > tokens.txt <<'EOF'
-<jwt1>
-<jwt2>
-<jwt3>
-EOF
-```
-
-Run the simulator (submission mode):
-
-```bash
-npm run simulate:allocations -- baseUrl=http://localhost:8080 count=100 concurrency=15 authFile=./tokens.txt
-```
-
-Additional modes now supported: `reallocate` (admin-driven reallocations) and `mixed` (blend of submissions + reallocations).
-
-Parameters:
-
-| Param | Default | Description |
-|-------|---------|-------------|
-| baseUrl | `http://localhost:8080` | API base URL |
-| count | 50 | Total submissions to attempt |
-| concurrency | 10 | Parallel requests per batch |
-| delayBetweenBatchesMs | 250 | Delay after each batch (ms) |
-| authFile | (required) | Path to tokens file |
-| session | current year | Academic session value in body |
-| timeoutMs | 8000 | Per-request abort timeout |
-| mode | submit | Allowed values: `submit`, `reallocate`, `mixed` |
-| reallocateRatio | 0.3 | When mode = mixed, probability an attempt is a reallocate |
-| adminAuthFile | (required for reallocate/mixed) | Path to admin tokens file |
-
-Output example (submit mode):
-
-```json
-{ "durationMs": 1835, "successes": 42, "failures": 3, "duplicates": 55, "attempted": 100 }
-```
-
-Duplicates represent students who already had a pending/approved allocation.
-
-Reallocate mode example:
-
-```bash
-npm run simulate:allocations -- mode=reallocate count=40 concurrency=5 adminAuthFile=./adminTokens.txt
-```
-
-Mixed mode example (25% reallocations):
-
-```bash
-npm run simulate:allocations -- mode=mixed reallocateRatio=0.25 count=120 concurrency=12 authFile=./studentTokens.txt adminAuthFile=./adminTokens.txt
-```
-
-Mixed/reallocate output shape:
-
-```json
-{
-  "durationMs": 2105,
-  "mode": "mixed",
-  "attempted": 120,
-  "submit": { "successes": 48, "failures": 5, "duplicates": 30 },
-  "reallocate": { "success": 20, "failed": 17, "compatibility": 6, "capacity": 4, "other": 7 }
-}
-```
-
-Field meanings:
-
-- submit.successes: New allocation submissions resulting in 201
-- submit.failures: Non-duplicate submission errors (e.g., validation)
-- submit.duplicates: Student already has a pending/approved allocation
-- reallocate.success: Successful reallocation operations
-- reallocate.failed: Total failed reallocation attempts (sum of compatibility + capacity + other)
-- reallocate.compatibility: Failures due to compatibility constraint
-- reallocate.capacity: Failures because target room was full
-- reallocate.other: All other error types (auth, not found, misc validation)
-
----
-
-## 📘 API Documentation (Swagger)
-
-Interactive docs: <http://localhost:8080/api-docs>
-Use the "Authorize" button and paste: `Bearer <your_jwt_token>` after logging in.
-
----
-
-## 🧪 Authentication Flow
-
-1. `POST /api/auth/register` – create account (student by default)
-2. `POST /api/auth/login` – receive `{ token, user }`
-3. Include header for protected routes:
+### Allocation Transaction Tests
+Allocation submission starts a MongoDB transaction. If you ever see:
 
 ```text
-Authorization: Bearer <token>
+MongoServerError: Transaction numbers are only allowed on a replica set member or mongos
 ```
 
-4. Super-admin OR existing admin creates another admin: `POST /api/admin/admins`
+It means a test bypassed the replica set initialization (e.g., misconfigured Jest setup). Verify `jest.setup.js` is executing and you’re not manually calling `mongoose.connect` in an individual test file.
 
-### Name vs fullName (Alias Behavior)
+### Handling Transient Write Conflicts
 
-Both student registration and admin creation accept either `fullName` or `name`. Rules:
+Transient error code `112` (catalog changes / write conflict) is retried automatically in the `submitAllocation` controller (with exponential backoff). In tests you’ll sometimes see a log:
 
-- One of `fullName` or `name` is required.
-- If both are supplied, `fullName` takes precedence.
-- Stored field is always persisted as `fullName` internally.
-- Validation enforces minimum length of 2 characters.
+```text
+allocation.submit.retry
 
-Examples:
+This is expected under heavy parallel test writes and not a failure.
 
-```jsonc
-// Using fullName
-{ "fullName": "Ada Lovelace", "email": "ada@example.com", "password": "Password123!" }
+### Coverage
 
-// Using name
-{ "name": "Grace Hopper", "email": "grace@example.com", "password": "Password123!" }
+Coverage thresholds are intentionally modest initially. To raise:
 
-// Both provided (fullName wins)
-{ "fullName": "Katherine Johnson", "name": "Kathy J.", "email": "katherine@example.com", "password": "Password123!" }
-```
+1. Improve branch coverage in controllers (error paths).
+2. Add unit tests for utilities under `src/utils/` currently at 0%.
+3. Expand service-layer edge cases (room selection fallbacks, complaint validation branches, etc.).
 
-Error when missing both:
+### Coverage (Quick)
 
-```json
-{ "message": "Either fullName or name is required" }
-```
+Add tests for controller error paths, utility modules, and allocation edge cases to raise coverage beyond ~34%.
 
----
+### Troubleshooting (Quick)
 
-### Creating Admin Users
+| Symptom | Fix |
+|---------|-----|
+| Transaction number error | Ensure in-memory replica set (jest setup) ran |
+| Hanging tests | Remove `app.listen` in tests / await async ops |
+| Flaky allocation writes | Expected retries (code 112) — investigate only if persistent |
+| Low coverage | Expand tests; verify `collectCoverageFrom` globs |
 
-There are two ways administrators enter the system:
+## � Example Login Request
 
-1. Initial super-admin (seed script) – has role `super-admin`.
-2. Any existing `super-admin` or `admin` can create a new `admin` via the protected endpoint.
-
-Endpoint:
-
-```http
-POST /api/admin/admins
-Authorization: Bearer <token-of-super-admin-or-admin>
-Content-Type: application/json
-```
-
-Request body fields (validated):
-
-```json
-{
-  "fullName": "Jane Admin",
-  "email": "jane.admin@example.com",
-  "password": "StrongP@ssw0rd",
-  "phone": "+2348012345678"
-}
-```
-
-Sample curl (super-admin creating first admin):
-
- 
-```bash
-curl -X POST http://localhost:8080/api/admin/admins \
-  -H "Authorization: Bearer $SUPER_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"fullName":"Jane Admin","email":"jane.admin@example.com","password":"StrongP@ssw0rd"}'
-```
-
-Sample curl (admin creating another admin):
-
-```bash
-curl -X POST http://localhost:8080/api/admin/admins \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"fullName":"Second Admin","email":"second.admin@example.com","password":"AnotherStr0ng!"}'
-```
-
-Expected 201 response:
-
- 
-```json
-{ "id": "<mongoId>", "status": "admin created" }
-```
-
-Recommendation: Log/admin-audit each admin creation (who created whom + timestamp + IP) and consider adding rate limiting to this endpoint.
-
-Error scenarios:
-
-- 400 if email already exists
-- 400 if required fields missing
-- 401 if missing / invalid token
-- 403 if caller is neither super-admin nor admin
-
-To obtain the initial super-admin token:
-
-1. Run the seed script `npm run create-super-admin` (if not already seeded).
-2. Login with that email/password using `POST /api/auth/login`.
-3. Use returned `token` for Authorization header above.
-
----
-
-## 📦 Key Endpoints Summary
-
-(See `/api-docs` for full details.)
-
-### Auth
-
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-
-### Students
-
-- `GET /api/students/:studentId/profile`
-- `PUT /api/students/:studentId/profile`
-- `POST /api/students/:studentId/profile/avatar` (multipart)
-- `GET /api/students/:studentId/roommate`
-
-### Hostels & Rooms
-
-- `GET /api/hostels`
-- `GET /api/hostels/:hostelId/rooms`
-- `POST /api/rooms/:hostelId/rooms` (admin)
-- `GET /api/rooms/hostel/:hostelId`
-- `GET /api/rooms/:id`
-
-### Allocations
-
-- `POST /api/allocations`
-- `GET /api/allocations/:studentId/status`
-- `GET /api/allocations` (admin)
-- `POST /api/allocations/admin` (admin)
-
-### Complaints
-
-- `POST /api/complaints/:studentId`
-- `GET /api/complaints/:studentId`
-
-### Admin Utilities
-
-- `POST /api/admin/admins` (super-admin or admin)
-- `GET /api/admin/reports/summary` (admin)
-- `GET /api/admin/reports/export` (admin)
-
----
-
-## 🖼 File Upload (Avatar)
-
-Endpoint: `POST /api/students/:studentId/profile/avatar`
-Form field name: `avatar`
-Content-Type: `multipart/form-data`
-Stored temporarily in `uploads/`. For production, integrate a cloud provider (S3, Cloudinary, etc.) and persist file URLs.
-
----
-
-## 🧾 Example Login Request
-
- 
 ```bash
 curl -X POST http://localhost:8080/api/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"email":"student@example.com","password":"Passw0rd!"}'
 ```
+
 Response:
 
- 
 ```json
 {
   "token": "<jwt>",
@@ -455,8 +187,6 @@ Defaults: `page=1`, `limit=20`, max limit = 100.
 
 `GET /healthz` returns service + database connectivity snapshot:
 
-
-```json
 {
   "status": "ok",
   "uptime": 123.45,
@@ -479,9 +209,6 @@ npm run lint:fix  # auto-fix where possible
 ```
 Prettier settings in `.prettierrc` (width 90, double quotes, semicolons). Editor settings normalized by `.editorconfig`.
 
-Recommended workflow before commit:
-
-```bash
 npm run lint:fix && npm run lint
 ```
 
@@ -501,37 +228,17 @@ npm run lint:fix && npm run lint
 
 ## 🧱 Architecture Notes
 
-- Stateless auth using JWT
-- Middleware composition: `protect` (auth) → `permit("role")` (authorization)
-- Separation of concerns: routes (transport) vs controllers (logic)
 - ES Modules enabled via `"type": "module"`
 
 ---
-
-## 🔒 Security Recommendations (Next Steps)
-
-- Rate limiting (e.g., `express-rate-limit`)
 - Helmet for HTTP headers
 - Password complexity validation
 - Refresh token rotation strategy (if sessions needed)
-- Central error handler middleware
-- Audit logging (admin creations, failed logins)
-- Enforce account lockout after repeated failed auth attempts
 
----
 
 ## 🧩 Compatibility & Allocation Algorithm
 
-## � Roadmap Ideas
-
-### Personality Trait Model
-
-Stored on each `User` under `personalityTraits`:
-
-```json
-{
   "sleepSchedule": "early|flexible|late",
-  "studyHabits": "quiet|mixed|group",
   "cleanlinessLevel": 1,
   "socialPreference": "introvert|balanced|extrovert",
   "noisePreference": "quiet|tolerant|noisy",
@@ -539,9 +246,6 @@ Stored on each `User` under `personalityTraits`:
   "musicPreference": "afrobeat",
   "visitorFrequency": "rarely|sometimes|often"
 }
-```
-
-### Normalization
 
 Categorical traits are mapped to a 0..1 scale (e.g. `early -> 0`, `flexible -> 0.5`, `late -> 1`). `cleanlinessLevel` (1–5) is scaled to 0..1. Hobbies use Jaccard similarity; music is exact match or neutral (0.5 if unspecified).
 
@@ -562,10 +266,6 @@ Categorical traits are mapped to a 0..1 scale (e.g. `early -> 0`, `flexible -> 0
 | low | <55 | Poor fit | reject |
 
 ### Endpoint: Match Suggestions
-
-`GET /api/allocations/:studentId/match-suggestions`
-
-Returns grouped compatibility suggestions (keys: `veryHigh`, `high`, `moderate`, `low`, `all`).
 
 ### Admin Approval & Adaptive Weights
 
@@ -604,9 +304,6 @@ Two mechanisms now reduce admin overhead:
 
 On success:
 
-```json
-{ "status": "reallocated", "allocationId": "...", "roomId": "..." }
-```
 
 If compatibility fails with any occupant, the reallocation is rejected (no partial updates thanks to the transaction).
 
@@ -626,7 +323,6 @@ Auto-pairing during submission and reallocation operations run inside MongoDB tr
 
 ### Future ML Enhancement Ideas
 
-- Persist historical pairings + outcomes (feedback ratings) to a `PairingFeedback` collection.
 - Replace heuristic penalty with learned coefficients (e.g., logistic regression over “satisfied vs not”).
 - Consider clustering to pre-group compatible cohorts before individual pairing.
 - Introduce negative feedback loops (e.g., conflict reports) to decay certain trait weightings.
@@ -636,13 +332,9 @@ Auto-pairing during submission and reallocation operations run inside MongoDB tr
 - Algorithm is pure & side-effect free (except for optional approval recording) → easy to test.
 - Room capacity + hostel gender constraints are enforced separately (this module only ranks human compatibility).
 - Add caching layer keyed by `traitSignature(user)` if performance becomes a concern at scale.
-
 ---
 
 ## 🧭 Roadmap Ideas
-
-- Pagination for listings (hostels, rooms, allocations)
-- Search & filtering (capacity, availability)
 - Allocation algorithm (auto-assignment + fairness logic)
 - Notifications/email integration
 - Soft deletes & audit logs
@@ -650,20 +342,92 @@ Auto-pairing during submission and reallocation operations run inside MongoDB tr
 - Test coverage (Jest + Supertest)
 - CI pipeline & Docker containerization
 
----
 
-## 🧪 Testing (Placeholder)
+### Overview
 
-Suggested stack:
+The test suite uses **Jest** with an **in-memory MongoDB replica set** (`MongoMemoryReplSet`) enabling:
 
-```text
-Jest + Supertest
-```
+- Transaction support (allocation submissions)
+- Isolation (no local Mongo dependency)
+- Deterministic cleanup (collections cleared after each test)
 
-Run tests (after adding):
+### Running Tests
 
 ```bash
 npm test
+```
+
+Jest loads `tests/jest.setup.js` (bootstrap + replica set). Coverage enabled via `jest.config.mjs`.
+
+### Structure
+
+```text
+tests/
+  utils/testDb.js
+  *.test.js
+```
+
+### Database Strategy
+- Single-member replica set (WiredTiger)
+- Truncate collections after each test
+- Drop DB + stop server after all tests
+- No real `MONGO_URI` required
+
+
+1. Create `tests/exampleFeature.test.js`.
+2. Import `app` and use `supertest`.
+3. Seed with Mongoose models inline.
+4. Assert on JSON responses.
+```js
+import request from 'supertest';
+import app from '../src/app.js';
+import User from '../src/models/User.js';
+
+test('creates a user', async () => {
+  await User.create({ fullName: 'Test', email: 'ex@example.com', password: 'Pass1234!', role: 'student' });
+  const res = await request(app).get('/api/students?limit=1');
+  expect(res.status).toBe(200);
+});
+```
+
+### Transaction Errors
+
+If you see:
+
+```text
+Transaction numbers are only allowed on a replica set member or mongos
+```
+
+Replica set init was skipped—verify `jest.setup.js` executed.
+
+### Transient Write Conflicts
+
+Log lines `allocation.submit.retry` indicate a handled retry (code 112) — expected under parallel writes.
+
+### Coverage
+
+Improve by covering:
+
+- Controller error paths
+- Utility modules (caching, responses)
+- Room selection and complaint edge cases
+
+### Troubleshooting Table
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Duplicate tests | Stray file outside `tests/` | Remove/move file |
+| Transaction error | Missing replica set | Ensure setup file runs |
+| Hanging tests | Unawaited async / app.listen used | Remove listen, await promises |
+| Flaky allocations | Transient conflicts | Retries already in place |
+| Low coverage | Glob misses files | Adjust `collectCoverageFrom` |
+
+### Performance / Load Tests
+
+Place in `tests/perf/` and run explicitly:
+
+```bash
+npm test -- --testPathPattern=perf
 ```
 
 ---
