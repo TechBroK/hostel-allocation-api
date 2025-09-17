@@ -18,7 +18,7 @@ export const listStudents = async (req, res, next) => {
       const parts = String(sort).split(',');
       for (const p of parts) {
         const [field, dir] = p.split(':');
-        if (['fullName','email','createdAt'].includes(field)) {
+        if (['fullName','email','createdAt','updatedAt'].includes(field)) {
           sortSpec[field] = dir === 'asc' ? 1 : -1;
         }
       }
@@ -52,7 +52,7 @@ export const listStudents = async (req, res, next) => {
       { $sort: sortSpec },
       { $skip: skip },
       { $limit: limit },
-      { $project: { fullName:1, email:1, gender:1, createdAt:1, allocationStatus: '$currentAllocation.status' } }
+      { $project: { fullName:1, email:1, gender:1, createdAt:1, updatedAt:1, allocationStatus: '$currentAllocation.status' } }
     );
 
     const countPipeline = pipeline

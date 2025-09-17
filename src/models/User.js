@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+
 import { LASU_DEPARTMENTS } from "../config/departments.js";
 
 
@@ -58,6 +59,19 @@ userSchema.pre('save', function(next) {
   }
   next();
 });
+
+// Query Helpers & Statics
+// Usage: User.find().recent(24)  -> updated in last 24 hours
+userSchema.query.recent = function(hours = 24) {
+  const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+  return this.where({ updatedAt: { $gte: since } });
+};
+
+// Static convenience: User.recentlyUpdated(hours, match)
+userSchema.statics.recentlyUpdated = function(hours = 24, criteria = {}) {
+  const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+  return this.find({ ...criteria, updatedAt: { $gte: since } }).sort({ updatedAt: -1 });
+};
 
 export { LASU_DEPARTMENTS, LEVELS };
 

@@ -5,16 +5,17 @@ import Allocation from '../../models/Allocation.js';
 import Room from '../../models/Room.js';
 import { ValidationError, NotFoundError } from '../../errors/AppError.js';
 import { getPaginationParams, buildPagedResponse } from '../../utils/pagination.js';
+import { getDepartments } from '../../utils/departmentCache.js';
 
 export async function listStudentsService(query) {
   const { page, limit, skip } = getPaginationParams(query);
   const [students, total] = await Promise.all([
-    User.find({ role: 'student' }).select('fullName matricNumber level email').skip(skip).limit(limit),
+    User.find({ role: 'student' }).select('fullName matricNumber level email createdAt updatedAt').skip(skip).limit(limit),
     User.countDocuments({ role: 'student' })
   ]);
   const studentsWithStatus = await Promise.all(students.map(async (s) => {
     const allocation = await Allocation.findOne({ student: s._id }).sort({ allocatedAt: -1 }).lean();
-    return { id: s._id, fullName: s.fullName, matricNumber: s.matricNumber, level: s.level, status: allocation ? allocation.status : 'pending' };
+    return { id: s._id, fullName: s.fullName, matricNumber: s.matricNumber, level: s.level, status: allocation ? allocation.status : 'pending', createdAt: s.createdAt, updatedAt: s.updatedAt };
   }));
   return buildPagedResponse({ items: studentsWithStatus, total, page, limit });
 }
@@ -32,6 +33,17 @@ export async function createAdminUserService(data) {
   return { id: admin._id, status: 'admin created' };
 }
 
+export async function listRecentStudentsService({ hours = 24, limit = 50 }) {
+  const h = Number(hours) || 24;
+  const lim = Math.min(Number(limit) || 50, 200);
+  const recent = await User.recentlyUpdated(h, { role: 'student' }).limit(lim).select('fullName email matricNumber level createdAt updatedAt');
+  const withStatus = await Promise.all(recent.map(async (s) => {
+    const allocation = await Allocation.findOne({ student: s._id }).sort({ allocatedAt: -1 }).lean();
+    return { id: s._id, fullName: s.fullName, email: s.email, matricNumber: s.matricNumber, level: s.level, allocationStatus: allocation?.status || 'pending', createdAt: s.createdAt, updatedAt: s.updatedAt };
+  }));
+  return { hours: h, count: withStatus.length, data: withStatus };
+}
+
 export async function updateStudentStatusService(studentId, status) {
   if (!['allocated','pending','rejected'].includes(status)) { throw new ValidationError('Invalid status'); }
   const allocation = await Allocation.findOne({ student: studentId }).sort({ allocatedAt: -1 });
@@ -42,11 +54,13 @@ export async function updateStudentStatusService(studentId, status) {
 
 export async function getSummaryService() {
   const totalStudents = await User.countDocuments({ role: 'student' });
+  const recentlyActiveStudents24h = await User.countDocuments({ role: 'student', updatedAt: { $gte: new Date(Date.now() - 24*60*60*1000) } });
   const totalRooms = await Room.countDocuments();
   const rooms = await Room.find().select('capacity occupied').lean();
   const occupiedRooms = rooms.reduce((s, r) => s + (r.occupied || 0), 0);
   const totalCapacity = rooms.reduce((s, r) => s + (r.capacity || 0), 0);
-  return { totalStudents, totalRooms, occupiedRooms, availableRooms: Math.max(0, totalCapacity - occupiedRooms) };
+  const departments = await getDepartments();
+  return { totalStudents, recentlyActiveStudents24h, totalRooms, occupiedRooms, availableRooms: Math.max(0, totalCapacity - occupiedRooms), departmentCount: departments.length };
 }
 
 export async function exportReportService({ type='allocations', format='csv' }) {
@@ -71,6 +85,7 @@ export async function exportReportService({ type='allocations', format='csv' }) 
 
 export default {
   listStudentsService,
+  listRecentStudentsService,
   createAdminUserService,
   updateStudentStatusService,
   getSummaryService,

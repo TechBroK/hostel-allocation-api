@@ -3,7 +3,7 @@ import express from "express";
 
 import { protect } from "../middleware/authMiddleware.js";
 import { permit } from "../middleware/roleMiddleware.js";
-import { listStudents, updateStudentStatus, getSummary, exportReport, createAdminUser } from "../controllers/adminController.js";
+import { listStudents, listRecentStudents, updateStudentStatus, getSummary, exportReport, createAdminUser } from "../controllers/adminController.js";
 import { createHostel, listHostels } from "../controllers/hostelController.js";
 import { createRoom, listRoomsByHostel } from "../controllers/roomController.js";
 import { adminCreateAllocation, listAllocations } from "../controllers/allocationController.js";
@@ -54,7 +54,7 @@ router.post("/admins", protect, permit("super-admin", "admin"), validate(createA
  * /api/admin/students:
  *   get:
  *     summary: List students (admin perspective)
- *     description: Returns paginated students with allocation status (pending if no allocation found).
+ *     description: Returns paginated students with allocation status (pending if no allocation found). Includes createdAt & updatedAt timestamps for activity tracking.
  *     tags: [Admin]
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -78,17 +78,47 @@ router.post("/admins", protect, permit("super-admin", "admin"), validate(createA
  *                 data:
  *                   type: array
  *                   items:
- *                     allOf:
- *                       - $ref: '#/components/schemas/User'
- *                       - type: object
- *                         properties:
- *                           allocationStatus: { type: string, enum: [pending, allocated] }
+ *                     $ref: '#/components/schemas/StudentListItem'
  *                 meta: { $ref: '#/components/schemas/PagedMeta' }
  *       401: { description: Unauthorized }
  *       403: { description: Forbidden }
  */
 // students
 router.get("/students", protect, permit("admin"), listStudents);
+/**
+ * @swagger
+ * /api/admin/students/recent:
+ *   get:
+ *     summary: List recently active students
+ *     description: Students updated within the last N hours (default 24). Limited to 50 by default.
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: hours
+ *         schema: { type: integer, minimum: 1, maximum: 720 }
+ *         description: Lookback window in hours (default 24, max 720)
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 1, maximum: 200 }
+ *         description: Max number of records (default 50)
+ *     responses:
+ *       200:
+ *         description: Recently active students
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 hours: { type: integer }
+ *                 count: { type: integer }
+ *                 data:
+ *                   type: array
+ *                   items: { $ref: '#/components/schemas/StudentListItem' }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ */
+router.get("/students/recent", protect, permit("admin"), listRecentStudents);
 /**
  * @swagger
  * /api/admin/students/{studentId}:

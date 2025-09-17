@@ -37,6 +37,20 @@ const swaggerDefinition = {
           department: { type: 'string', description: 'LASU department (subset)', enum: ['Computer Science','Mass Communication','Business Administration','Accounting','Biochemistry','Microbiology','Economics','Political Science','Physics','Chemistry','Mathematics','Law','Medicine','Philosophy','History'] }
         }
       },
+      StudentListItem: {
+        type: 'object',
+        description: 'Lightweight student representation for listings',
+        properties: {
+          id: { type: 'string' },
+          fullName: { type: 'string' },
+          email: { type: 'string', format: 'email' },
+          matricNumber: { type: 'string' },
+          level: { type: 'string', enum: ['100','200','300','400','500'] },
+          allocationStatus: { type: 'string', enum: ['pending','approved','rejected'] },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' }
+        }
+      },
       Hostel: {
         type: 'object',
         required: ['name', 'type', 'capacity'],

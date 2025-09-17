@@ -1,9 +1,13 @@
 // src/controllers/adminController.js
 
-import { listStudentsService, createAdminUserService, updateStudentStatusService, getSummaryService, exportReportService } from '../services/controllers/adminService.js';
+import { listStudentsService, listRecentStudentsService, createAdminUserService, updateStudentStatusService, getSummaryService, exportReportService } from '../services/controllers/adminService.js';
 
 export const listStudents = async (req, res, next) => {
   try { return res.json(listStudentsService(req.query)); } catch (err) { return next(err); }
+};
+
+export const listRecentStudents = async (req, res, next) => {
+  try { return res.json(await listRecentStudentsService({ hours: req.query.hours, limit: req.query.limit })); } catch (err) { return next(err); }
 };
 
   // Super-admin creates an admin user
