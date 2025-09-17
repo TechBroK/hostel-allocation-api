@@ -6,20 +6,14 @@ import Hostel from '../src/models/Hostel.js';
 import { listStudentsService, exportReportService } from '../src/services/controllers/adminService.js';
 
 describe('adminService.listStudentsService (aggregation)', () => {
-  beforeAll(async () => {
-    if (!mongoose.connection.readyState) {
-      await mongoose.connect(process.env.MONGO_URL || 'mongodb://127.0.0.1:27017/hostel_unit');
-    }
-  });
-  afterAll(async () => {
-    await mongoose.connection.dropDatabase();
-    await mongoose.disconnect();
-  });
+  // Global jest.setup.js handles DB lifecycle & per-test clearing; only ensure collections clean.
   beforeEach(async () => {
-    await Allocation.deleteMany({});
-    await User.deleteMany({});
-    await Room.deleteMany({});
-    await Hostel.deleteMany({});
+    await Promise.all([
+      Allocation.deleteMany({}),
+      User.deleteMany({}),
+      Room.deleteMany({}),
+      Hostel.deleteMany({})
+    ]);
   });
 
   it('returns pending status when no allocation exists', async () => {
@@ -39,20 +33,13 @@ describe('adminService.listStudentsService (aggregation)', () => {
 });
 
 describe('adminService.exportReportService (integration aggregates)', () => {
-  beforeAll(async () => {
-    if (!mongoose.connection.readyState) {
-      await mongoose.connect(process.env.MONGO_URL || 'mongodb://127.0.0.1:27017/hostel_unit');
-    }
-  });
-  afterAll(async () => {
-    await mongoose.connection.dropDatabase();
-    await mongoose.disconnect();
-  });
   beforeEach(async () => {
-    await Allocation.deleteMany({});
-    await User.deleteMany({});
-    await Room.deleteMany({});
-    await Hostel.deleteMany({});
+    await Promise.all([
+      Allocation.deleteMany({}),
+      User.deleteMany({}),
+      Room.deleteMany({}),
+      Hostel.deleteMany({})
+    ]);
   });
 
   it('exports students csv with correct header', async () => {

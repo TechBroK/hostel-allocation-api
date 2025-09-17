@@ -42,9 +42,11 @@ export const submitAllocation = async (req, res, next) => {
     } catch (err) {
       await sessionMongo.abortTransaction().catch(() => {});
       sessionMongo.endSession();
-      // Mongo write conflict / catalog change transient errors often expose code 112
-      if (err?.code === 112 && attempt < maxRetries - 1) {
-        const backoff = 50 * Math.pow(2, attempt); // 50ms, 100ms
+      // Transient retryable conditions:
+      // 112 = WriteConflict / transient transaction error
+      // 24  = LockTimeout (unable to acquire collection/DB lock quickly) observed in CI under contention
+      if ([112, 24].includes(err?.code) && attempt < maxRetries - 1) {
+        const backoff = 50 * Math.pow(2, attempt); // 50ms, 100ms, 200ms
         logError('allocation.submit.retry', { attempt: attempt + 1, backoffMs: backoff, code: err.code, message: err.message });
         await new Promise(r => setTimeout(r, backoff));
         attempt += 1;
