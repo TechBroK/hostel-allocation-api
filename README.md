@@ -21,6 +21,7 @@ A Node.js/Express REST API for managing student hostel allocations, rooms, hoste
 - Conflict resolution worker scans stale pending allocations and attempts fairness-based pairing.
 - Structured JSON logging for allocation submissions and reallocations with duration metrics.
 - Flexible name handling: registration & admin creation accept either `fullName` or `name` (with `fullName` taking precedence if both provided).
+ - Admin moderation endpoints for pending allocations (list, approve with optional room override, reject).
 
 ---
 
@@ -160,6 +161,7 @@ Response:
 | Manage hostels / rooms | ❌ | ✅ | ✅ |
 | Create admin user | ❌ | ✅ | ✅ |
 | Export reports | ❌ | ✅ | ✅ |
+| Moderate allocations (list/approve/reject) | ❌ | ✅ | ✅ |
 
 ---
 
@@ -180,6 +182,65 @@ Response format:
 ```
 
 Defaults: `page=1`, `limit=20`, max limit = 100.
+
+### Allocation Moderation Endpoints (Admin)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/admin/allocations/unallocated` | List pending allocations (shape: `{ allocations: [ { _id, student, room, session, status, appliedAt } ] }`). Optional `session` filter. |
+| PATCH | `/api/admin/allocations/:id/approve` | Approve a pending allocation. Accepts optional JSON body `{ roomId }` to override/assign a room at approval time. Fails with 400 if target room is full. |
+| PATCH | `/api/admin/allocations/:id/reject` | Reject a pending allocation. |
+
+Approval rules:
+1. If allocation already approved → returns status `already approved`.
+2. If no room and no `roomId` supplied → 400 validation error.
+3. If `roomId` supplied and different → reassigned before capacity check.
+4. Capacity check uses `room.occupied >= room.capacity` and errors with `Room is full`.
+5. On success, `room.occupied` increments and response includes `{ id, status: 'approved', roomId }`.
+
+#### Request Body Validation (Approve)
+
+`PATCH /api/admin/allocations/:id/approve` accepts an optional JSON body:
+
+```json
+{ "roomId": "64f8c1d9e2b5a1c4f0d12345" }
+```
+
+Validation:
+
+| Field  | Type   | Required | Notes |
+|--------|--------|----------|-------|
+| roomId | string | No       | Must match 24-char hex Mongo ObjectId regex. When provided overrides existing pending room. |
+
+If the allocation has no room and `roomId` is omitted → validation error.
+
+#### Audit Log Events
+
+Approvals and rejections emit structured Pino events for observability:
+
+| Event | When | Payload Fields |
+|-------|------|----------------|
+| `allocation.approve` | After successful approval commit | allocationId, adminId, studentId, roomId, override (boolean), previousStatus, newStatus |
+| `allocation.reject`  | After status set to rejected | allocationId, adminId, studentId, previousStatus, newStatus |
+
+Example approval log:
+
+```json
+{
+  "level":30,
+  "time":"2025-09-17T12:34:56.789Z",
+  "event":"allocation.approve",
+  "allocationId":"665af1...",
+  "adminId":"665aa9...",
+  "studentId":"665ac2...",
+  "roomId":"665ad3...",
+  "override":true,
+  "previousStatus":"pending",
+  "newStatus":"approved"
+}
+```
+
+You can filter these events downstream (e.g., Loki/ELK) using `event=allocation.approve` or `event=allocation.reject`.
 
 ---
 

@@ -1,4 +1,3 @@
-// src/routes/adminRoutes.js
 import express from "express";
 
 import { protect } from "../middleware/authMiddleware.js";
@@ -6,11 +5,12 @@ import { permit } from "../middleware/roleMiddleware.js";
 import { listStudents, listUnallocatedStudents, listRecentStudents, updateStudentStatus, getSummary, exportReport, createAdminUser } from "../controllers/adminController.js";
 import { createHostel, listHostels } from "../controllers/hostelController.js";
 import { createRoom, listRoomsByHostel, listUnallocatedRooms } from "../controllers/roomController.js";
-import { adminCreateAllocation, listAllocations } from "../controllers/allocationController.js";
+import { adminCreateAllocation, listAllocations, listPendingAllocations, approveAllocation, rejectAllocation } from "../controllers/allocationController.js";
 import { validate } from "../middleware/validate.js";
 import { createHostelSchema } from "../validators/hostel.validator.js";
 import { createRoomSchema } from "../validators/room.validator.js";
 import { adminCreateAllocationSchema } from "../validators/allocation.validator.js";
+import { approveAllocationSchema } from "../validators/allocationModeration.validator.js";
 import { createAdminSchema } from "../validators/adminCreate.validator.js";
 import { updateStudentStatusSchema } from "../validators/admin.validator.js";
 
@@ -91,6 +91,91 @@ router.post("/admins", protect, permit("super-admin", "admin"), validate(createA
  */
 // students
 router.get("/students", protect, permit("admin"), listStudents);
+
+/**
+ * @swagger
+ * /api/admin/allocations/unallocated:
+ *   get:
+ *     summary: List pending (unapproved) allocations
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: session
+ *         schema: { type: string }
+ *         description: Optional academic session filter
+ *     responses:
+ *       200:
+ *         description: Pending allocations list
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 allocations:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id: { type: string }
+ *                       student: { type: string, nullable: true }
+ *                       room: { type: string, nullable: true }
+ *                       session: { type: string }
+ *                       status: { type: string }
+ *                       appliedAt: { type: string, format: date-time, nullable: true }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ */
+router.get("/allocations/unallocated", protect, permit("admin"), listPendingAllocations);
+
+/**
+ * @swagger
+ * /api/admin/allocations/{id}/approve:
+ *   patch:
+ *     summary: Approve a pending allocation
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               roomId: { type: string, pattern: "^[0-9a-fA-F]{24}$", description: "Optional override room ObjectId" }
+ *     responses:
+ *       200: { description: Allocation approved }
+ *       400: { description: Validation error }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ *       404: { description: Allocation not found }
+ */
+router.patch("/allocations/:id/approve", protect, permit("admin"), validate(approveAllocationSchema), approveAllocation);
+
+/**
+ * @swagger
+ * /api/admin/allocations/{id}/reject:
+ *   patch:
+ *     summary: Reject a pending allocation
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Allocation rejected }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ *       404: { description: Allocation not found }
+ */
+router.patch("/allocations/:id/reject", protect, permit("admin"), rejectAllocation);
 /**
  * @swagger
  * /api/admin/students/unallocated:

@@ -331,6 +331,108 @@ export const getApprovedPairings = async (req, res, next) => {
   }
 };
 
+// GET /api/admin/allocations/unallocated  (admin only)
+// Returns allocations still in pending (no approved status) with student + room basic info.
+export const listPendingAllocations = async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin') { throw new ForbiddenError('Admin only'); }
+    const { session } = req.query || {};
+    const match = { status: 'pending' };
+    if (session) { match.session = session; }
+    const docs = await Allocation.find(match)
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(500)
+      .populate('student')
+      .populate('room')
+      .lean();
+    const allocations = docs.map(d => ({
+      _id: d._id,
+      student: d.student?.fullName || null,
+      room: d.room?.roomNumber || null,
+      session: d.session,
+      status: d.status.charAt(0).toUpperCase() + d.status.slice(1),
+      appliedAt: d.createdAt || d.allocatedAt || null
+    }));
+    return res.json({ allocations });
+  } catch (err) { return next(err); }
+};
+
+// PATCH /api/admin/allocations/:id/approve
+export const approveAllocation = async (req, res, next) => {
+  let mongoSession;
+  try {
+    if (req.user.role !== 'admin') { throw new ForbiddenError('Admin only'); }
+    const { id } = req.params;
+  const { roomId } = (req.validated && req.validated.body) || req.body || {};
+    mongoSession = await Allocation.startSession();
+    mongoSession.startTransaction();
+    const allocation = await Allocation.findById(id).populate('room').session(mongoSession);
+    if (!allocation) { throw new NotFoundError('Allocation not found'); }
+  if (allocation.status === 'approved') { return res.json({ id: allocation._id, status: 'already approved', roomId: allocation.room }); }
+
+    // Determine which room to approve into (body override allowed)
+  const targetRoomId = roomId || allocation.room?._id;
+    if (!targetRoomId) { throw new ValidationError('roomId required (allocation currently has no room)'); }
+
+    // If override provided and different from existing pending allocation, set it.
+    if (roomId && (!allocation.room || allocation.room._id.toString() !== roomId)) {
+      allocation.room = roomId; // reassign before populate fetch
+    }
+
+    const room = await Room.findById(targetRoomId).session(mongoSession);
+    if (!room) { throw new NotFoundError('Room not found'); }
+    if ((room.occupied || 0) >= (room.capacity || 0)) {
+      throw new ValidationError('Room is full');
+    }
+    allocation.status = 'approved';
+    allocation.allocatedAt = new Date();
+    room.occupied = (room.occupied || 0) + 1;
+    await allocation.save({ session: mongoSession });
+    await room.save({ session: mongoSession });
+    await mongoSession.commitTransaction();
+    mongoSession.endSession();
+    logInfo('allocation.approve', {
+      allocationId: allocation._id.toString(),
+      adminId: req.user._id.toString(),
+      studentId: allocation.student.toString(),
+      roomId: room._id.toString(),
+      override: !!roomId,
+      previousStatus: 'pending',
+      newStatus: 'approved'
+    });
+    return res.json({ id: allocation._id, status: 'approved', roomId: room._id });
+  } catch (err) {
+    if (mongoSession) {
+      try {
+        await mongoSession.abortTransaction();
+      } catch { /* ignore abort error */ }
+      try { mongoSession.endSession(); } catch { /* ignore end error */ }
+    }
+    return next(err);
+  }
+};
+
+// PATCH /api/admin/allocations/:id/reject
+export const rejectAllocation = async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin') { throw new ForbiddenError('Admin only'); }
+    const { id } = req.params;
+    const allocation = await Allocation.findById(id);
+    if (!allocation) { throw new NotFoundError('Allocation not found'); }
+    const prev = allocation.status;
+    allocation.status = 'rejected';
+    await allocation.save();
+    logInfo('allocation.reject', {
+      allocationId: allocation._id.toString(),
+      adminId: req.user._id.toString(),
+      studentId: allocation.student.toString(),
+      previousStatus: prev,
+      newStatus: 'rejected'
+    });
+    return res.json({ id: allocation._id, status: 'rejected' });
+  } catch (err) { return next(err); }
+};
+
 // Auto allocate two students into a specified room if compatibility qualifies and capacity allows.
 // POST /api/allocations/auto-allocate { studentIdA, studentIdB, roomId }
 export const autoAllocatePair = async (req, res, next) => {
