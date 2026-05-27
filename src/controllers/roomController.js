@@ -1,5 +1,5 @@
 // src/controllers/roomController.js
-import { createRoomService, listRoomsByHostelService, getRoomService, listUnallocatedRoomsService } from '../services/controllers/roomService.js';
+import { createRoomService, listRoomsByHostelService, getRoomService, listUnallocatedRoomsService, deleteRoomService, updateRoomService } from '../services/controllers/roomService.js';
 
 /**
  * @desc    Create a new room in a hostel (Admin only)
@@ -24,3 +24,7 @@ export const getRoom = async (req, res, next) => { try { const { id } = req.vali
 
 // List rooms with remaining capacity (admin)
 export const listUnallocatedRooms = async (req, res, next) => { try { return res.json(await listUnallocatedRoomsService(req.query)); } catch (err) { return next(err); } };
+
+export const deleteRoom = async (req, res, next) => { try { const { id } = req.validated || req.params; const result = await deleteRoomService(id); return res.json(result); } catch (err) { return next(err); } };
+
+export const updateRoom = async (req, res, next) => { try { const { id } = req.validated || req.params; const result = await updateRoomService(id, req.validated || req.body); return res.json(result); } catch (err) { return next(err); } };

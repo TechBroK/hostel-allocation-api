@@ -13,3 +13,9 @@ export const roomIdParamSchema = z.object({
 export const hostelIdParamSchema = z.object({
   hostelId: z.string().min(1)
 });
+
+export const updateRoomSchema = z.object({
+  roomNumber: z.string().min(1).optional(),
+  type: z.enum(['Standard', 'Premium']).optional(),
+  capacity: z.number().int().positive().optional()
+});

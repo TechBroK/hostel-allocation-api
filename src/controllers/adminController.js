@@ -1,6 +1,7 @@
 // src/controllers/adminController.js
 
-import { listStudentsService, listUnallocatedStudentsService, listRecentStudentsService, createAdminUserService, updateStudentStatusService, getSummaryService, exportReportService } from '../services/controllers/adminService.js';
+import { listStudentsService, listUnallocatedStudentsService, listRecentStudentsService, createAdminUserService, updateStudentStatusService, getSummaryService, exportReportService, createStudentService, updateStudentProfileService, deleteStudentService } from '../services/controllers/adminService.js';
+import { getDepartments } from '../utils/departmentCache.js';
 
 export const listStudents = async (req, res, next) => {
   try { return res.json(await listStudentsService(req.query)); } catch (err) { return next(err); }
@@ -25,8 +26,22 @@ export const updateStudentStatus = async (req, res, next) => {
   try { const { studentId } = req.params; const { status } = req.validated || req.body; return res.json(await updateStudentStatusService(studentId, status)); } catch (err) { return next(err); }
 };
 
+export const createStudent = async (req, res, next) => {
+  try { const result = await createStudentService(req.validated || req.body); return res.status(201).json(result); } catch (err) { return next(err); }
+};
+export const updateStudentProfile = async (req, res, next) => {
+  try { const { studentId } = req.params; const updated = await updateStudentProfileService(studentId, req.validated || req.body); return res.json(updated); } catch (err) { return next(err); }
+};
+export const deleteStudent = async (req, res, next) => {
+  try { const { studentId } = req.params; const result = await deleteStudentService(studentId); return res.json(result); } catch (err) { return next(err); }
+};
+
 export const getSummary = async (req, res, next) => { try { return res.json(await getSummaryService()); } catch (err) { return next(err); } };
 
 export const exportReport = async (req, res, next) => {
   try { const { type='allocations', format='csv' } = req.query; const { filename, csv } = await exportReportService({ type, format }); res.header('Content-Type','text/csv'); res.attachment(filename); return res.send(csv); } catch (err) { return next(err); }
+};
+
+export const listDepartments = async (_req, res, next) => {
+  try { const depts = await getDepartments(); return res.json({ items: depts }); } catch (err) { return next(err); }
 };

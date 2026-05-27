@@ -6,25 +6,26 @@ import { LASU_DEPARTMENTS } from "../config/departments.js";
 const LEVELS = ['100','200','300','400','500'];
 
 const userSchema = new mongoose.Schema({
-  fullName: { type: String, required: true },
-  matricNumber: { type: String },
+  fullName: { type: String, required: true, trim: true },
+  matricNumber: { type: String, trim: true },
   email: { type: String, required: true, unique: true },
-  // Nigerian MSISDN format: enforce +234 prefix; stored normalized (e.g. +2348012345678)
+  // Nigerian MSISDN format: accept common inputs; saved normalized to +234XXXXXXXXXX
   phone: {
     type: String,
     validate: {
       validator(v) {
         if (!v) { return true; } // optional
-        return /^\+234\d{10}$/.test(v); // +234 followed by 10 digits (total 14 chars)
+        // Accept +234XXXXXXXXXX or local 0XXXXXXXXXX or 234XXXXXXXXXX; normalized in pre hooks
+        return /^(\+234\d{10}|0\d{10}|234\d{10})$/.test(v);
       },
-      message: 'Phone must be a Nigerian number in +234XXXXXXXXXX format'
+      message: 'Phone must be a Nigerian number in +234XXXXXXXXXX, 0XXXXXXXXXX, or 234XXXXXXXXXX format'
     }
   },
   password: { type: String, required: true },
   role: { type: String, enum: ["student", "admin", "super-admin"], default: "student" },
   gender: { type: String, enum: ["male", "female"], index: true },
   level: { type: String, enum: LEVELS }, // optional on creation for non-students
-  department: { type: String, enum: LASU_DEPARTMENTS },
+  department: { type: String, enum: LASU_DEPARTMENTS, trim: true },
   personalityTraits: {
     sleepSchedule: String,
     studyHabits: String,
@@ -50,7 +51,7 @@ userSchema.index({ role: 1, createdAt: -1 });
 userSchema.index({ role: 1, updatedAt: -1 });
 
 // Normalize phone before save: accept common Nigerian local formats (0XXXXXXXXXX or 234XXXXXXXXXX)
-userSchema.pre('save', function(next) {
+userSchema.pre('validate', function(next) {
   if (this.phone) {
     let p = this.phone.trim();
     // Replace leading 0 with +234

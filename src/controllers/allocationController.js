@@ -62,33 +62,57 @@ export const submitAllocation = async (req, res, next) => {
 };
 
 export const adminCreateAllocation = async (req, res, next) => {
+  let mongoSession;
   try {
     const { studentId, roomId, session } = req.validated || req.body;
-    if (!studentId || !roomId) {
-      throw new ValidationError("studentId and roomId required");
+    if (!studentId || !roomId) { throw new ValidationError("studentId and roomId required"); }
+    mongoSession = await Allocation.startSession();
+    mongoSession.startTransaction();
+    const student = await User.findById(studentId).session(mongoSession);
+    if (!student) { throw new NotFoundError("Student not found"); }
+    const room = await Room.findById(roomId).populate('hostel').session(mongoSession);
+    if (!room) { throw new NotFoundError("Room not found"); }
+    if (student.gender && room.hostel?.type && student.gender !== room.hostel.type) {
+      throw new ValidationError('Gender-hostel type mismatch');
     }
-    const student = await User.findById(studentId);
-    if (!student) {
-      throw new NotFoundError("Student not found");
+    const sessionLabel = session || new Date().getFullYear().toString();
+    const existingApproved = await Allocation.findOne({ student: studentId, status: 'approved' }).session(mongoSession);
+    if (existingApproved) { throw new ValidationError('Student already has an approved allocation'); }
+
+    // If an allocation for this session exists (e.g., pending), update it instead of creating a duplicate
+    let existingAlloc = await Allocation.findOne({ student: studentId, session: sessionLabel }).session(mongoSession);
+    if (existingAlloc) {
+      if ((room.occupied || 0) + 1 > (room.capacity || 0)) { throw new ValidationError('Room is full'); }
+      existingAlloc.room = room._id;
+      existingAlloc.status = 'approved';
+      existingAlloc.allocatedAt = new Date();
+      await existingAlloc.save({ session: mongoSession });
+      room.occupied = (room.occupied || 0) + 1;
+      await room.save({ session: mongoSession });
+      await mongoSession.commitTransaction();
+      mongoSession.endSession();
+      return res.status(200).json({ id: existingAlloc._id, status: 'approved' });
     }
-    const room = await Room.findById(roomId);
-    if (!room) {
-      throw new NotFoundError("Room not found");
-    }
-    if ((room.occupied || 0) + 1 > (room.capacity || 0)) {
-      throw new ValidationError("Room is full");
-    }
-    const allocation = await Allocation.create({
+
+    // Otherwise, create a new approved allocation
+    if ((room.occupied || 0) + 1 > (room.capacity || 0)) { throw new ValidationError('Room is full'); }
+    const allocation = await Allocation.create([{
       student: studentId,
       room: roomId,
-      session: session || new Date().getFullYear().toString(),
-      status: "approved",
+      session: sessionLabel,
+      status: 'approved',
       allocatedAt: new Date(),
-    });
+    }], { session: mongoSession });
     room.occupied = (room.occupied || 0) + 1;
-    await room.save();
-    return res.status(201).json({ id: allocation._id, status: "allocated" });
+    await room.save({ session: mongoSession });
+    await mongoSession.commitTransaction();
+    mongoSession.endSession();
+    return res.status(201).json({ id: allocation[0]._id, status: 'approved' });
   } catch (err) {
+    try { if (mongoSession) { await mongoSession.abortTransaction(); mongoSession.endSession(); } } catch {}
+    if (err?.code === 11000) {
+      return next(new ValidationError('Allocation for this student & session already exists'));
+    }
     return next(err);
   }
 };
@@ -268,8 +292,13 @@ export const getMatchSuggestions = async (req, res, next) => {
     if (!target) {
       throw new NotFoundError("Student not found");
     }
-    // limit candidate pool for now (same gender & not already allocated approved)
-    const candidateUsers = await User.find({ _id: { $ne: studentId }, role: "student" }).lean();
+    // Limit candidate pool: same gender and exclude students already approved
+    const approvedStudentIds = await Allocation.find({ status: 'approved' }).distinct('student');
+    const candidateUsers = await User.find({
+      _id: { $ne: studentId, $nin: approvedStudentIds },
+      role: 'student',
+      ...(target.gender ? { gender: target.gender } : {})
+    }).lean();
     const sig = traitSignature(target);
     const cached = getCachedSuggestions(studentId, sig);
     let grouped;
@@ -459,6 +488,131 @@ export const reallocate = async (req, res, next) => {
       }
   } catch { /* swallow */ }
     logError('allocation.reallocate.error', { message: err.message, stack: err.stack, allocationId: req.params.allocationId });
+    return next(err);
+  }
+};
+
+// PATCH /api/admin/allocations/:allocationId { status }
+export const updateAllocationStatus = async (req, res, next) => {
+  let mongoSession;
+  try {
+    if (req.user.role !== 'admin') {
+      throw new ForbiddenError('Admin only');
+    }
+    const { allocationId } = req.params;
+    const nextStatusRaw = (req.body?.status || '').toString().toLowerCase();
+    const allowed = ['pending', 'approved', 'rejected'];
+    if (!allowed.includes(nextStatusRaw)) {
+      throw new ValidationError('Invalid status');
+    }
+    mongoSession = await Allocation.startSession();
+    mongoSession.startTransaction();
+    const allocation = await Allocation.findById(allocationId)
+      .populate({ path: 'room', populate: { path: 'hostel', model: 'Hostel' } })
+      .populate('student')
+      .session(mongoSession);
+    if (!allocation) { throw new NotFoundError('Allocation not found'); }
+    const prevStatus = allocation.status;
+    const nextStatus = nextStatusRaw;
+    if (prevStatus === nextStatus) {
+      await mongoSession.commitTransaction();
+      mongoSession.endSession();
+      return res.json({ id: allocation._id, status: allocation.status });
+    }
+
+    // Approve: requires a room and capacity/gender validation
+    if (nextStatus === 'approved') {
+      if (!allocation.room) {
+        throw new ValidationError('Cannot approve without assigning a room');
+      }
+      const roomDoc = await Room.findById(allocation.room._id || allocation.room)
+        .populate('hostel')
+        .session(mongoSession);
+      if (!roomDoc) { throw new NotFoundError('Room not found'); }
+      if (allocation.student?.gender && roomDoc.hostel?.type && allocation.student.gender !== roomDoc.hostel.type) {
+        throw new ValidationError('Gender-hostel type mismatch');
+      }
+      if (prevStatus !== 'approved') {
+        const nextOccupied = (roomDoc.occupied || 0) + 1;
+        if (nextOccupied > (roomDoc.capacity || 0)) {
+          throw new ValidationError('Room is full');
+        }
+        roomDoc.occupied = nextOccupied;
+        await roomDoc.save({ session: mongoSession });
+      }
+      allocation.status = 'approved';
+      allocation.allocatedAt = new Date();
+      await allocation.save({ session: mongoSession });
+    }
+
+    // Reject or Pending: free bed if previously approved and clear assignment
+    if (nextStatus === 'rejected' || nextStatus === 'pending') {
+      if (prevStatus === 'approved' && allocation.room) {
+        const roomDoc = await Room.findById(allocation.room._id || allocation.room).session(mongoSession);
+        if (roomDoc) {
+          roomDoc.occupied = Math.max(0, (roomDoc.occupied || 1) - 1);
+          await roomDoc.save({ session: mongoSession });
+        }
+      }
+      allocation.status = nextStatus;
+      allocation.allocatedAt = null;
+      allocation.room = null; // clear assignment when not approved
+      await allocation.save({ session: mongoSession });
+    }
+
+    await mongoSession.commitTransaction();
+    mongoSession.endSession();
+    return res.json({ id: allocation._id, status: allocation.status });
+  } catch (err) {
+    try { if (mongoSession) { await mongoSession.abortTransaction(); mongoSession.endSession(); } } catch {}
+    return next(err);
+  }
+};
+
+// POST /api/allocations/apply  { profile?, personalityTraits?, roomId?, session? }
+export const applyForAllocation = async (req, res, next) => {
+  let mongoSession;
+  try {
+    const studentId = req.user._id;
+    const body = req.validated || req.body || {};
+    const { profile, personalityTraits, roomId, session: sessionLabel } = body;
+
+    mongoSession = await Allocation.startSession();
+    mongoSession.startTransaction();
+
+    // 1) Apply any profile updates
+    if (profile && Object.keys(profile).length) {
+      const mutable = { ...profile };
+      delete mutable.role; delete mutable.password;
+      await User.findByIdAndUpdate(studentId, mutable, { new: false, session: mongoSession });
+    }
+
+    // 2) Save personality traits if provided
+    if (personalityTraits && Object.keys(personalityTraits).length) {
+      const user = await User.findById(studentId).session(mongoSession);
+      if (!user) { throw new NotFoundError('Student not found'); }
+      user.personalityTraits = { ...(user.personalityTraits || {}), ...personalityTraits };
+      await user.save({ session: mongoSession });
+    }
+
+    // 3) Submit allocation (pending)
+    const { allocation: finalAllocation } = await submitStudentAllocation({ session: mongoSession, studentId: studentId, sessionLabel });
+    // If the student provided a preferred roomId, persist it on the pending allocation
+    // but do NOT auto-approve the allocation here. Admin must approve.
+    if (roomId) {
+      const roomDoc = await Room.findById(roomId).session(mongoSession);
+      if (!roomDoc) {
+        throw new NotFoundError('Preferred room not found');
+      }
+      finalAllocation.room = roomDoc._id;
+      await finalAllocation.save({ session: mongoSession });
+    }
+
+    await mongoSession.commitTransaction();
+    mongoSession.endSession();
+    return res.status(201).json({ id: finalAllocation._id, status: finalAllocation.status, roomId: finalAllocation.room || null });
+  } catch (err) {
+    try { if (mongoSession) { await mongoSession.abortTransaction(); mongoSession.endSession(); } } catch {}
     return next(err);
   }
 };

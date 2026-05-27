@@ -57,16 +57,59 @@ const SOCIAL_MAP = { introvert: 0, balanced: 0.5, extrovert: 1 };
 const NOISE_MAP = { quiet: 0, tolerant: 0.5, noisy: 1 };
 const VISITOR_MAP = { rarely: 0, sometimes: 0.5, often: 1 };
 
+// Map UI labels and legacy keys to canonical tokens
+const LABEL_MAP = {
+  // Sleep schedule
+  'early bird (before 10pm)': 'early',
+  'night owl (after 10pm)': 'late',
+  'variable': 'flexible',
+  // Study habits
+  'in room': 'quiet',
+  'library': 'quiet',
+  'study groups': 'group',
+  'mixed': 'mixed',
+  // Cleanliness handled numerically
+  // Social
+  'very social': 'extrovert',
+  'moderately social': 'balanced',
+  'reserved': 'introvert',
+  // Noise
+  'prefer quiet': 'quiet',
+  'moderate noise ok': 'tolerant',
+  "don't mind noise": 'noisy',
+  // Visitor
+  'rarely': 'rarely',
+  'occasionally': 'sometimes',
+  'frequently': 'often',
+};
+
+function canonicalToken(value) {
+  const v = (value || '').toString().toLowerCase();
+  return LABEL_MAP[v] || v;
+}
+
 function normalizeTraits(personality = {}) {
+  // Accept legacy alternate keys
+  const p = {
+    sleepSchedule: personality.sleepSchedule ?? personality.sleepPattern,
+    studyHabits: personality.studyHabits ?? personality.studyPreference,
+    cleanlinessLevel: personality.cleanlinessLevel ?? personality.cleanliness,
+    socialPreference: personality.socialPreference,
+    noisePreference: personality.noisePreference,
+    hobbies: personality.hobbies,
+    musicPreference: personality.musicPreference,
+    visitorFrequency: personality.visitorFrequency,
+  };
+  // Convert human labels to tokens and clamp numbers
   return {
-    sleepSchedule: mapOrdinal((personality.sleepSchedule || "").toLowerCase(), SLEEP_MAP),
-    studyHabits: mapOrdinal((personality.studyHabits || "").toLowerCase(), STUDY_MAP),
-    cleanlinessLevel: clampNumber(personality.cleanlinessLevel, 1, 5) / 5, // scale to 0..1
-    socialPreference: mapOrdinal((personality.socialPreference || "").toLowerCase(), SOCIAL_MAP),
-    noisePreference: mapOrdinal((personality.noisePreference || "").toLowerCase(), NOISE_MAP),
-    visitorFrequency: mapOrdinal((personality.visitorFrequency || "").toLowerCase(), VISITOR_MAP),
-    hobbies: Array.isArray(personality.hobbies) ? personality.hobbies.map((h) => h.toLowerCase()) : [],
-    musicPreference: (personality.musicPreference || "").toLowerCase(),
+    sleepSchedule: mapOrdinal(canonicalToken(p.sleepSchedule), SLEEP_MAP),
+    studyHabits: mapOrdinal(canonicalToken(p.studyHabits), STUDY_MAP),
+    cleanlinessLevel: clampNumber(typeof p.cleanlinessLevel === 'string' ? parseInt(p.cleanlinessLevel, 10) : p.cleanlinessLevel, 1, 5) / 5,
+    socialPreference: mapOrdinal(canonicalToken(p.socialPreference), SOCIAL_MAP),
+    noisePreference: mapOrdinal(canonicalToken(p.noisePreference), NOISE_MAP),
+    visitorFrequency: mapOrdinal(canonicalToken(p.visitorFrequency), VISITOR_MAP),
+    hobbies: Array.isArray(p.hobbies) ? p.hobbies.map((h) => h.toLowerCase()) : [],
+    musicPreference: (p.musicPreference || "").toLowerCase(),
   };
 }
 

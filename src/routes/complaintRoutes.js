@@ -2,9 +2,10 @@
 import express from "express";
 
 import { protect } from "../middleware/authMiddleware.js";
-import { createComplaint, getComplaintsByStudent } from "../controllers/complaintController.js";
+import { createComplaint, getComplaintsByStudent, updateComplaint } from "../controllers/complaintController.js";
 import { validate } from "../middleware/validate.js";
-import { createComplaintSchema, studentIdParamSchema } from "../validators/complaint.validator.js";
+import { createComplaintSchema, studentIdParamSchema, complaintIdParamSchema, updateComplaintSchema } from "../validators/complaint.validator.js";
+import { permit } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
@@ -61,5 +62,8 @@ router.post("/:studentId", protect, validate(studentIdParamSchema), validate(cre
 
 // GET /api/complaints/:studentId
 router.get("/:studentId", protect, validate(studentIdParamSchema), getComplaintsByStudent);
+
+// PATCH /api/complaints/:complaintId  (admin only)
+router.patch("/:complaintId", protect, permit("admin"), validate(complaintIdParamSchema), validate(updateComplaintSchema), updateComplaint);
 
 export default router;

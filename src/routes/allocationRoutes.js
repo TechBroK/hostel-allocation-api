@@ -3,9 +3,9 @@ import express from "express";
 
 import { protect } from "../middleware/authMiddleware.js";
 import { permit } from "../middleware/roleMiddleware.js";
-import { submitAllocation, adminCreateAllocation, listAllocations, getAllocationStatus, getMatchSuggestions, approvePairing, getApprovedPairings } from "../controllers/allocationController.js";
+import { submitAllocation, adminCreateAllocation, listAllocations, getAllocationStatus, getMatchSuggestions, approvePairing, getApprovedPairings, applyForAllocation } from "../controllers/allocationController.js";
 import { validate } from "../middleware/validate.js";
-import { submitAllocationSchema, adminCreateAllocationSchema, studentIdParamSchema } from "../validators/allocation.validator.js";
+import { submitAllocationSchema, adminCreateAllocationSchema, studentIdParamSchema, applyAllocationSchema } from "../validators/allocation.validator.js";
 
 const router = express.Router();
 
@@ -39,6 +39,9 @@ const router = express.Router();
 
 // student submission (authenticated)
 router.post("/", protect, validate(submitAllocationSchema), submitAllocation);
+
+// Combined apply: update profile + save personality + submit allocation (optionally with roomId)
+router.post("/apply", protect, validate(applyAllocationSchema), applyForAllocation);
 
 /**
  * @swagger

@@ -8,4 +8,7 @@ const roomSchema = new mongoose.Schema({
   occupied: { type: Number, default: 0 }
 });
 
+roomSchema.index({ hostel: 1 });
+roomSchema.index({ hostel: 1, roomNumber: 1 }, { unique: true });
+
 export default mongoose.model("Room", roomSchema);

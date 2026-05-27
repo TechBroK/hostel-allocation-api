@@ -10,3 +10,11 @@ export const createHostelSchema = z.object({
 export const hostelIdParamSchema = z.object({
   hostelId: z.string().min(1)
 });
+
+export const updateHostelSchema = z.object({
+  name: z.string().min(2).optional(),
+  type: z.enum(['male', 'female']).optional(),
+  capacity: z.number().int().positive().optional(),
+  description: z.string().optional()
+});
+

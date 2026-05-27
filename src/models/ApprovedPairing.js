@@ -8,6 +8,17 @@ const approvedPairingSchema = new mongoose.Schema({
   weightSnapshot: { type: Object }, // record weights at approval time for audit
 }, { timestamps: true });
 
-approvedPairingSchema.index({ studentIdA: 1, studentIdB: 1 }, { unique: true });
+// Deterministic orderless unique key to prevent A|B vs B|A duplicates
+approvedPairingSchema.add({ pairKey: { type: String, unique: true, index: true } });
+approvedPairingSchema.pre('validate', function(next) {
+  if (this.studentIdA && this.studentIdB) {
+    const a = this.studentIdA.toString();
+    const b = this.studentIdB.toString();
+    this.pairKey = a < b ? `${a}|${b}` : `${b}|${a}`;
+  }
+  next();
+});
+approvedPairingSchema.index({ approvedAt: -1 });
+approvedPairingSchema.index({ approvedBy: 1, approvedAt: -1 });
 
 export default mongoose.model("ApprovedPairing", approvedPairingSchema);

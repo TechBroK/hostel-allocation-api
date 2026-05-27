@@ -26,3 +26,17 @@ export const protect = async (req, res, next) => {
     return res.status(401).json({ message: "Invalid token" });
   }
 };
+
+// Role-based access control middleware
+// Usage: router.get(path, protect, permit('admin', 'super-admin'), handler)
+export const permit = (...allowedRoles) => {
+  return (req, res, next) => {
+    if (!req.user || !req.user.role) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    next();
+  };
+};

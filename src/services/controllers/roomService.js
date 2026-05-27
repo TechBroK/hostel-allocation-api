@@ -1,5 +1,6 @@
 import Room from '../../models/Room.js';
 import Hostel from '../../models/Hostel.js';
+import Allocation from '../../models/Allocation.js';
 import { ValidationError, NotFoundError } from '../../errors/AppError.js';
 import { getPaginationParams, buildPagedResponse } from '../../utils/pagination.js';
 
@@ -12,7 +13,7 @@ export async function createRoomService(hostelId, { roomNumber, type, capacity }
   const exists = await Room.findOne({ hostel: hostelId, roomNumber });
   if (exists) { throw new ValidationError('Room number already exists in this hostel'); }
   const room = await Room.create({ hostel: hostelId, roomNumber, type, capacity, occupied: 0 });
-  return { id: room._id, status: 'created' };
+  return { id: room._id, roomNumber: room.roomNumber, type: room.type, capacity: room.capacity, occupied: room.occupied || 0, hostel: hostelId };
 }
 
 export async function listRoomsByHostelService(hostelId, query) {
@@ -51,4 +52,30 @@ export async function listUnallocatedRoomsService(query = {}) {
   return buildPagedResponse({ items: mapped, total, page, limit });
 }
 
-export default { createRoomService, listRoomsByHostelService, getRoomService, listUnallocatedRoomsService };
+export async function deleteRoomService(roomId) {
+  const room = await Room.findById(roomId);
+  if (!room) { throw new NotFoundError('Room not found'); }
+
+  const allocationsCount = await Allocation.countDocuments({ room: roomId });
+  if (allocationsCount > 0) {
+    throw new ValidationError('Cannot delete room with existing allocations. Reassign or remove those allocations first.');
+  }
+
+  await room.deleteOne();
+  return { success: true, message: 'Room deleted' };
+}
+
+export async function updateRoomService(roomId, payload) {
+  const room = await Room.findById(roomId);
+  if (!room) { throw new NotFoundError('Room not found'); }
+  if (payload.capacity !== undefined && payload.capacity < (room.occupied || 0)) {
+    throw new ValidationError('New capacity cannot be less than currently occupied beds');
+  }
+  if (payload.roomNumber !== undefined) room.roomNumber = payload.roomNumber;
+  if (payload.type !== undefined) room.type = payload.type;
+  if (payload.capacity !== undefined) room.capacity = payload.capacity;
+  await room.save();
+  return { id: room._id, roomNumber: room.roomNumber, type: room.type, capacity: room.capacity, occupied: room.occupied || 0 };
+}
+
+export default { createRoomService, listRoomsByHostelService, getRoomService, listUnallocatedRoomsService, deleteRoomService, updateRoomService };

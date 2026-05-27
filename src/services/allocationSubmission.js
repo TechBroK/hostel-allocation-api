@@ -29,53 +29,10 @@ export async function submitStudentAllocation({ session, studentId, sessionLabel
   ], { session });
   const allocationDoc = allocationArr[0];
 
-  // Find potential peer allocations
-  const pendingPeers = await Allocation.find({
-    _id: { $ne: allocationDoc._id },
-    room: { $exists: false },
-    status: 'pending'
-  }).populate('student').session(session);
-
-  let paired = false; let chosenPeer = null; let compatibilityMeta = null;
-  for (const peerAlloc of pendingPeers) {
-    const peerUser = peerAlloc.student;
-  if (!peerUser) { continue; }
-    const { score, range } = computeCompatibility(user, peerUser.toObject ? peerUser.toObject() : peerUser);
-    if (['veryHigh', 'high'].includes(range)) {
-      chosenPeer = peerAlloc;
-      compatibilityMeta = { score, range };
-      break;
-    }
-  }
-  if (chosenPeer) {
-    const selectedRoomLean = await selectRoomForPair({ gender: user.gender, minFreeSlots: 2 });
-    if (selectedRoomLean) {
-      const selectedRoom = await Room.findById(selectedRoomLean._id).session(session).populate('hostel');
-      if (selectedRoom && (selectedRoom.capacity - (selectedRoom.occupied || 0)) >= 2) {
-        if (!(user.gender && selectedRoom.hostel && selectedRoom.hostel.type && user.gender !== selectedRoom.hostel.type)) {
-          allocationDoc.room = selectedRoom._id;
-          allocationDoc.status = 'approved';
-          allocationDoc.allocatedAt = new Date();
-          allocationDoc.compatibilityScore = compatibilityMeta.score;
-          allocationDoc.compatibilityRange = compatibilityMeta.range;
-          allocationDoc.autoPaired = true;
-          await allocationDoc.save({ session });
-
-          chosenPeer.room = selectedRoom._id;
-          chosenPeer.status = 'approved';
-          chosenPeer.allocatedAt = new Date();
-          chosenPeer.autoPaired = true;
-          chosenPeer.compatibilityScore = compatibilityMeta.score;
-          chosenPeer.compatibilityRange = compatibilityMeta.range;
-          await chosenPeer.save({ session });
-
-          selectedRoom.occupied = (selectedRoom.occupied || 0) + 2;
-          await selectedRoom.save({ session });
-          paired = true;
-        }
-      }
-    }
-  }
+  // Auto-pairing and auto-approval disabled: keep allocation pending for admin approval.
+  // Optionally, compute compatibility meta without applying side effects in the future.
+  const paired = false;
+  const compatibilityMeta = null;
   return { allocation: allocationDoc, paired, compatibilityMeta };
 }
 

@@ -8,3 +8,14 @@ export const createComplaintSchema = z.object({
 export const studentIdParamSchema = z.object({
   studentId: z.string().min(1)
 });
+
+export const complaintIdParamSchema = z.object({
+  complaintId: z.string().min(1)
+});
+
+export const updateComplaintSchema = z.object({
+  status: z.enum(['Pending','Resolved']).optional(),
+  response: z.string().min(1).optional(),
+}).refine((data) => typeof data.status !== 'undefined' || typeof data.response !== 'undefined', {
+  message: 'At least one of status or response is required',
+});

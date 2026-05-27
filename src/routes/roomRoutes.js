@@ -3,9 +3,10 @@ import express from "express";
 
 import { protect } from "../middleware/authMiddleware.js";
 import { permit } from "../middleware/roleMiddleware.js";
-import { createRoom, listRoomsByHostel, getRoom } from "../controllers/roomController.js";
+import { createRoom, listRoomsByHostel, getRoom, deleteRoom, updateRoom } from "../controllers/roomController.js";
+import Room from "../models/Room.js";
 import { validate } from "../middleware/validate.js";
-import { createRoomSchema, hostelIdParamSchema, roomIdParamSchema } from "../validators/room.validator.js";
+import { createRoomSchema, hostelIdParamSchema, roomIdParamSchema, updateRoomSchema } from "../validators/room.validator.js";
 
 const router = express.Router();
 
@@ -90,5 +91,21 @@ router.get("/hostel/:hostelId", validate(hostelIdParamSchema), listRoomsByHostel
 
 // get single room
 router.get("/:id", validate(roomIdParamSchema), getRoom);
+
+// Optional: /rooms/:id/availability used by FE helper; returns remaining capacity
+router.get("/:id/availability", validate(roomIdParamSchema), async (req, res, next) => {
+	try {
+		const { id } = req.params;
+		const room = await Room.findById(id).lean();
+		if (!room) { return res.status(404).json({ message: 'Room not found' }); }
+		const remaining = Math.max(0, (room.capacity || 0) - (room.occupied || 0));
+		return res.json({ id: room._id.toString(), remaining, capacity: room.capacity, occupied: room.occupied || 0 });
+	} catch (err) { return next(err); }
+});
+
+// delete room (admin only) - duplicate of admin route for flexibility
+router.delete("/:id", protect, permit("admin"), validate(roomIdParamSchema), deleteRoom);
+// update room (admin only) - duplicate of admin route for flexibility
+router.patch("/:id", protect, permit("admin"), validate(roomIdParamSchema), validate(updateRoomSchema), updateRoom);
 
 export default router;

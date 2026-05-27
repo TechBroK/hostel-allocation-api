@@ -3,16 +3,16 @@ import express from "express";
 
 import { protect } from "../middleware/authMiddleware.js";
 import { permit } from "../middleware/roleMiddleware.js";
-import { listStudents, listUnallocatedStudents, listRecentStudents, updateStudentStatus, getSummary, exportReport, createAdminUser } from "../controllers/adminController.js";
-import { createHostel, listHostels } from "../controllers/hostelController.js";
-import { createRoom, listRoomsByHostel, listUnallocatedRooms } from "../controllers/roomController.js";
-import { adminCreateAllocation, listAllocations } from "../controllers/allocationController.js";
+import { listStudents, listUnallocatedStudents, listRecentStudents, updateStudentStatus, getSummary, exportReport, createAdminUser, createStudent, updateStudentProfile, deleteStudent, listDepartments } from "../controllers/adminController.js";
+import { createHostel, listHostels, deleteHostel, updateHostel } from "../controllers/hostelController.js";
+import { createRoom, listRoomsByHostel, listUnallocatedRooms, deleteRoom, updateRoom } from "../controllers/roomController.js";
+import { adminCreateAllocation, listAllocations, updateAllocationStatus } from "../controllers/allocationController.js";
 import { validate } from "../middleware/validate.js";
-import { createHostelSchema } from "../validators/hostel.validator.js";
-import { createRoomSchema } from "../validators/room.validator.js";
+import { createHostelSchema, hostelIdParamSchema as hostelIdParamSchemaForHostel, updateHostelSchema } from "../validators/hostel.validator.js";
+import { createRoomSchema, roomIdParamSchema, hostelIdParamSchema, updateRoomSchema } from "../validators/room.validator.js";
 import { adminCreateAllocationSchema } from "../validators/allocation.validator.js";
 import { createAdminSchema } from "../validators/adminCreate.validator.js";
-import { updateStudentStatusSchema } from "../validators/admin.validator.js";
+import { updateStudentStatusSchema, createStudentSchema, updateStudentProfileSchema } from "../validators/admin.validator.js";
 
 const router = express.Router();
 
@@ -91,6 +91,8 @@ router.post("/admins", protect, permit("super-admin", "admin"), validate(createA
  */
 // students
 router.get("/students", protect, permit("admin"), listStudents);
+// Create a student
+router.post("/students", protect, permit("admin"), validate(createStudentSchema), createStudent);
 /**
  * @swagger
  * /api/admin/students/unallocated:
@@ -211,6 +213,10 @@ router.get("/students/recent", protect, permit("admin"), listRecentStudents);
  *       404: { description: Student not found }
  */
 router.put("/students/:studentId", protect, permit("admin"), validate(updateStudentStatusSchema), updateStudentStatus);
+// Update profile fields
+router.patch("/students/:studentId", protect, permit("admin"), validate(updateStudentProfileSchema), updateStudentProfile);
+// Delete student
+router.delete("/students/:studentId", protect, permit("admin"), deleteStudent);
 
 /**
  * @swagger
@@ -284,6 +290,10 @@ router.post("/hostels", protect, permit("admin"), validate(createHostelSchema), 
  *       403: { description: Forbidden }
  */
 router.get("/hostels", protect, permit("admin"), listHostels);
+// update hostel
+router.patch("/hostels/:hostelId", protect, permit("admin"), validate(hostelIdParamSchemaForHostel), validate(updateHostelSchema), updateHostel);
+// delete hostel
+router.delete("/hostels/:hostelId", protect, permit("admin"), validate(hostelIdParamSchemaForHostel), deleteHostel);
 /**
  * @swagger
  * /api/admin/hostels/{hostelId}/rooms:
@@ -340,6 +350,10 @@ router.post("/hostels/:hostelId/rooms", protect, permit("admin"), validate(creat
  *       404: { description: Hostel not found }
  */
 router.get("/hostels/:hostelId/rooms", protect, permit("admin"), listRoomsByHostel);
+// update room
+router.patch("/rooms/:id", protect, permit("admin"), validate(roomIdParamSchema), validate(updateRoomSchema), updateRoom);
+// delete room
+router.delete("/rooms/:id", protect, permit("admin"), validate(roomIdParamSchema), deleteRoom);
 
 /**
  * @swagger
@@ -468,6 +482,35 @@ router.get("/allocations", protect, permit("admin"), listAllocations);
 
 /**
  * @swagger
+ * /api/admin/allocations/{allocationId}:
+ *   patch:
+ *     summary: Update allocation status (pending | approved | rejected)
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: allocationId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status: { type: string, enum: [pending, approved, rejected] }
+ *     responses:
+ *       200: { description: Status updated }
+ *       400: { description: Validation error }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ *       404: { description: Not found }
+ */
+router.patch("/allocations/:allocationId", protect, permit("admin"), updateAllocationStatus);
+
+/**
+ * @swagger
  * /api/admin/reports/summary:
  *   get:
  *     summary: Get system summary metrics
@@ -516,5 +559,8 @@ router.get("/reports/summary", protect, permit("admin"), getSummary);
  *       403: { description: Forbidden }
  */
 router.get("/reports/export", protect, permit("admin"), exportReport);
+
+// departments
+router.get("/departments", protect, permit("admin"), listDepartments);
 
 export default router;

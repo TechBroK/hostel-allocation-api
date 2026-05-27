@@ -1,8 +1,9 @@
 import bcrypt from 'bcryptjs';
 
-import User from '../../models/User.js';
+import User, { LASU_DEPARTMENTS } from '../../models/User.js';
 import Allocation from '../../models/Allocation.js';
 import Room from '../../models/Room.js';
+import Hostel from '../../models/Hostel.js';
 import { ValidationError, NotFoundError } from '../../errors/AppError.js';
 import { getPaginationParams, buildPagedResponse } from '../../utils/pagination.js';
 import { getDepartments } from '../../utils/departmentCache.js';
@@ -14,6 +15,10 @@ export async function listStudentsService(query) {
   if (query.gender) { match.gender = query.gender; }
   if (query.department) { match.department = query.department; }
   if (query.level) { match.level = query.level; }
+  if (query.q) {
+    const rx = new RegExp(String(query.q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    match.$or = [{ fullName: rx }, { email: rx }, { matricNumber: rx }];
+  }
   const pipeline = [
     { $match: match },
     { $sort: { createdAt: -1, _id: 1 } },
@@ -23,7 +28,7 @@ export async function listStudentsService(query) {
         { $limit: limit },
         { $lookup: { from: 'allocations', let: { studentId: '$_id' }, pipeline: [ { $match: { $expr: { $eq: ['$student','$$studentId'] } } }, { $sort: { allocatedAt: -1, _id: -1 } }, { $limit: 1 }, { $project: { status: 1 } } ], as: 'latestAllocation' } },
         { $addFields: { status: { $ifNull: [ { $arrayElemAt: ['$latestAllocation.status',0] }, 'pending' ] } } },
-        { $project: { _id:1, fullName:1, matricNumber:1, level:1, email:1, status:1, createdAt:1, updatedAt:1 } }
+        { $project: { _id:1, fullName:1, matricNumber:1, level:1, email:1, phone:1, gender:1, department:1, role:1, status:1, createdAt:1, updatedAt:1 } }
       ],
       meta: [ { $count: 'total' } ]
     } }
@@ -31,7 +36,7 @@ export async function listStudentsService(query) {
   const agg = await User.aggregate(pipeline);
   const items = agg[0]?.data || [];
   const total = agg[0]?.meta?.[0]?.total || 0;
-  const mapped = items.map(i => ({ id: i._id, fullName: i.fullName, matricNumber: i.matricNumber, level: i.level, email: i.email, status: i.status, createdAt: i.createdAt, updatedAt: i.updatedAt }));
+  const mapped = items.map(i => ({ id: i._id, fullName: i.fullName, matricNumber: i.matricNumber, level: i.level, email: i.email, phone: i.phone, gender: i.gender, department: i.department, role: i.role, status: i.status, createdAt: i.createdAt, updatedAt: i.updatedAt }));
   return buildPagedResponse({ items: mapped, total, page, limit });
 }
 
@@ -124,9 +129,75 @@ export async function updateStudentStatusService(studentId, status) {
   return { id: allocation._id, status: allocation.status };
 }
 
+// Admin: create a student (optional password). If password omitted, generate a temporary password.
+export async function createStudentService(payload) {
+  const { fullName, email, password, matricNumber, level, phone, gender, department } = payload;
+  if (!fullName || !email) { throw new ValidationError('fullName and email are required'); }
+  const exists = await User.findOne({ email });
+  if (exists) { throw new ValidationError('Email already in use'); }
+  let pwd = password;
+  if (!pwd) {
+    const suffix = Math.random().toString(36).slice(2, 8);
+    pwd = `Std${suffix}!1`;
+  }
+  const hashed = await bcrypt.hash(pwd, 10);
+  // Normalize department against whitelist (case-insensitive); omit if no match
+  let normalizedDept = undefined;
+  if (department) {
+    const depts = Array.isArray(LASU_DEPARTMENTS) ? LASU_DEPARTMENTS : [];
+    const found = depts.find(d => d.toLowerCase() === String(department).trim().toLowerCase());
+    if (found) { normalizedDept = found; }
+  }
+  const user = await User.create({ fullName, email, password: hashed, matricNumber, level, phone, gender, department: normalizedDept, role: 'student' });
+  const item = {
+    _id: user._id,
+    fullName: user.fullName,
+    email: user.email,
+    matricNumber: user.matricNumber || '',
+    level: user.level || '',
+    phone: user.phone || '',
+    gender: user.gender || '',
+    department: user.department || '',
+    role: user.role
+  };
+  return { item, temporaryPassword: password ? undefined : pwd };
+}
+
+// Admin: update student profile fields
+export async function updateStudentProfileService(studentId, data) {
+  const allowed = ['fullName','email','matricNumber','level','phone','gender','department'];
+  const update = {};
+  for (const k of allowed) { if (data[k] !== undefined) { update[k] = data[k]; } }
+  if (update.department) {
+    const depts = Array.isArray(LASU_DEPARTMENTS) ? LASU_DEPARTMENTS : [];
+    const found = depts.find(d => d.toLowerCase() === String(update.department).trim().toLowerCase());
+    update.department = found || undefined;
+  }
+  const user = await User.findOneAndUpdate({ _id: studentId, role: 'student' }, update, { new: true, runValidators: true });
+  if (!user) { throw new NotFoundError('Student not found'); }
+  return {
+    _id: user._id,
+    fullName: user.fullName,
+    email: user.email,
+    matricNumber: user.matricNumber || '',
+    level: user.level || '',
+    phone: user.phone || '',
+    gender: user.gender || '',
+    department: user.department || '',
+    role: user.role
+  };
+}
+
+// Admin: delete a student
+export async function deleteStudentService(studentId) {
+  const res = await User.deleteOne({ _id: studentId, role: 'student' });
+  if (!res.deletedCount) { throw new NotFoundError('Student not found'); }
+  return { status: 'deleted' };
+}
+
 export async function getSummaryService() {
   const since24 = new Date(Date.now() - 24*60*60*1000);
-  const [studentAgg, roomAgg, departments] = await Promise.all([
+  const [studentAgg, roomAgg, departments, totalHostels, pendingAllocations] = await Promise.all([
     User.aggregate([
       { $match: { role: 'student' } },
       { $group: { _id: null, total: { $sum: 1 }, active: { $sum: { $cond: [ { $gte: ['$updatedAt', since24] }, 1, 0 ] } } } }
@@ -134,7 +205,9 @@ export async function getSummaryService() {
     Room.aggregate([
       { $group: { _id: null, totalRooms: { $sum: 1 }, occupiedBeds: { $sum: { $ifNull: ['$occupied',0] } }, totalBeds: { $sum: { $ifNull: ['$capacity',0] } } } }
     ]),
-    getDepartments()
+    getDepartments(),
+    Hostel.countDocuments(),
+    Allocation.countDocuments({ status: 'pending' }),
   ]);
   const studentMeta = studentAgg[0] || { total: 0, active: 0 };
   const roomMeta = roomAgg[0] || { totalRooms: 0, occupiedBeds: 0, totalBeds: 0 };
@@ -144,7 +217,10 @@ export async function getSummaryService() {
     totalRooms: roomMeta.totalRooms,
     occupiedRooms: roomMeta.occupiedBeds,
     availableRooms: Math.max(0, (roomMeta.totalBeds - roomMeta.occupiedBeds)),
-    departmentCount: departments.length
+    departmentCount: departments.length,
+    totalHostels,
+    pendingAllocations,
+    allocations: { pending: pendingAllocations },
   };
 }
 
@@ -190,6 +266,9 @@ export default {
   listRecentStudentsService,
   createAdminUserService,
   updateStudentStatusService,
+  createStudentService,
+  updateStudentProfileService,
+  deleteStudentService,
   getSummaryService,
   exportReportService
 };

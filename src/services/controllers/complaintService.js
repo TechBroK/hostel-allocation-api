@@ -1,5 +1,5 @@
 import Complaint from '../../models/Complaint.js';
-import { ValidationError, ForbiddenError } from '../../errors/AppError.js';
+import { ValidationError, ForbiddenError, NotFoundError } from '../../errors/AppError.js';
 import { getPaginationParams, buildPagedResponse } from '../../utils/pagination.js';
 
 export async function createComplaintService({ requester, studentId, payload }) {
@@ -20,4 +20,14 @@ export async function getComplaintsByStudentService({ requester, studentId, quer
   return buildPagedResponse({ items: complaints, total, page, limit });
 }
 
-export default { createComplaintService, getComplaintsByStudentService };
+export async function updateComplaintService({ requester, complaintId, payload }) {
+  if (requester.role !== 'admin') { throw new ForbiddenError('Admin only'); }
+  const complaint = await Complaint.findById(complaintId);
+  if (!complaint) { throw new NotFoundError('Complaint not found'); }
+  if (typeof payload.status !== 'undefined') complaint.status = payload.status;
+  if (typeof payload.response !== 'undefined') complaint.response = payload.response;
+  await complaint.save();
+  return { id: complaint._id, status: complaint.status, response: complaint.response };
+}
+
+export default { createComplaintService, getComplaintsByStudentService, updateComplaintService };
