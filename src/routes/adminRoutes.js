@@ -2,17 +2,29 @@ import express from "express";
 
 import { protect } from "../middleware/authMiddleware.js";
 import { permit } from "../middleware/roleMiddleware.js";
-<<<<<<< HEAD
-import { listStudents, listUnallocatedStudents, listRecentStudents, updateStudentStatus, getSummary, exportReport, createAdminUser, createStudent, updateStudentProfile, deleteStudent, listDepartments } from "../controllers/adminController.js";
+import {
+	listStudents,
+	listUnallocatedStudents,
+	listRecentStudents,
+	updateStudentStatus,
+	getSummary,
+	exportReport,
+	createAdminUser,
+	createStudent,
+	updateStudentProfile,
+	deleteStudent,
+	listDepartments,
+} from "../controllers/adminController.js";
 import { createHostel, listHostels, deleteHostel, updateHostel } from "../controllers/hostelController.js";
 import { createRoom, listRoomsByHostel, listUnallocatedRooms, deleteRoom, updateRoom } from "../controllers/roomController.js";
-import { adminCreateAllocation, listAllocations, updateAllocationStatus } from "../controllers/allocationController.js";
-=======
-import { listStudents, listUnallocatedStudents, listRecentStudents, updateStudentStatus, getSummary, exportReport, createAdminUser } from "../controllers/adminController.js";
-import { createHostel, listHostels } from "../controllers/hostelController.js";
-import { createRoom, listRoomsByHostel, listUnallocatedRooms } from "../controllers/roomController.js";
-import { adminCreateAllocation, listAllocations, listPendingAllocations, approveAllocation, rejectAllocation } from "../controllers/allocationController.js";
->>>>>>> 41cfeb6ce558fad57b6584dbe3b28a28845df0e4
+import {
+	adminCreateAllocation,
+	listAllocations,
+	updateAllocationStatus,
+	listPendingAllocations,
+	approveAllocation,
+	rejectAllocation,
+} from "../controllers/allocationController.js";
 import { validate } from "../middleware/validate.js";
 import { createHostelSchema, hostelIdParamSchema as hostelIdParamSchemaForHostel, updateHostelSchema } from "../validators/hostel.validator.js";
 import { createRoomSchema, roomIdParamSchema, hostelIdParamSchema, updateRoomSchema } from "../validators/room.validator.js";
@@ -98,10 +110,9 @@ router.post("/admins", protect, permit("super-admin", "admin"), validate(createA
  */
 // students
 router.get("/students", protect, permit("admin"), listStudents);
-<<<<<<< HEAD
+
 // Create a student
 router.post("/students", protect, permit("admin"), validate(createStudentSchema), createStudent);
-=======
 
 /**
  * @swagger
@@ -187,7 +198,6 @@ router.patch("/allocations/:id/approve", protect, permit("admin"), validate(appr
  *       404: { description: Allocation not found }
  */
 router.patch("/allocations/:id/reject", protect, permit("admin"), rejectAllocation);
->>>>>>> 41cfeb6ce558fad57b6584dbe3b28a28845df0e4
 /**
  * @swagger
  * /api/admin/students/unallocated:
