@@ -1,8 +1,14 @@
 // src/controllers/studentController.js
+import { put } from "@vercel/blob";
+
 import User from "../models/User.js";
 import Allocation from "../models/Allocation.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../errors/AppError.js";
 import { getPaginationParams, buildPagedResponse } from "../utils/pagination.js";
+
+const toArrayBuffer = (buffer) => buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+
+const getSafeFilename = (filename = "avatar") => filename.replace(/[^a-zA-Z0-9._-]/g, "-");
 
 export const listStudents = async (req, res, next) => {
   try {
@@ -159,9 +165,17 @@ export const uploadAvatar = async (req, res, next) => {
     if (!req.file) {
       throw new ValidationError("No file uploaded");
     }
-    const profilePicPath = `/${req.file.path.replace(/\\/g, "/")}`;
-    const updated = await User.findByIdAndUpdate(studentId, { profilePic: profilePicPath }, { new: true }).select("-password");
-    return res.json({ status: "success", profilePic: profilePicPath, user: updated });
+    const blob = await put(
+      `avatars/${studentId}/${Date.now()}-${getSafeFilename(req.file.originalname)}`,
+      toArrayBuffer(req.file.buffer),
+      {
+        access: "public",
+        contentType: req.file.mimetype,
+        addRandomSuffix: true,
+      }
+    );
+    const updated = await User.findByIdAndUpdate(studentId, { profilePic: blob.url }, { new: true }).select("-password");
+    return res.json({ status: "success", profilePic: blob.url, user: updated });
   } catch (err) {
     return next(err);
   }

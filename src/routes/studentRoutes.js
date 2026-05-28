@@ -10,7 +10,7 @@ import { updatePersonalitySchema } from "../validators/personality.validator.js"
 import { updateProfileSchema, studentIdParamSchema } from "../validators/student.validator.js";
 
 const router = express.Router();
-const upload = multer({ dest: "uploads/" }); // customize for production (cloud + originalname etc.)
+const upload = multer({ storage: multer.memoryStorage() });
 
 /**
  * @swagger
