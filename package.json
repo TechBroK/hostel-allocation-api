@@ -4,7 +4,7 @@
   "main": "src/app.js",
   "scripts": {
     "start": "node src/app.js",
-    "build": "nest build"
+    "build": "nest build",
   "test": "NODE_ENV=test NODE_OPTIONS=--experimental-vm-modules jest --config=jest.config.mjs --runInBand",
   "test:ci": "NODE_ENV=test NODE_OPTIONS=--experimental-vm-modules jest --config=jest.config.mjs --runInBand --coverage",
     "create-super-admin": "node src/createSuperAdmin.js",
